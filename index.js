@@ -1,4 +1,4 @@
-require('dotenv').config(); // Must be at the very top to load environment variables
+require('dotenv').config(); // Must be at the very top
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
-// Read configuration from environment variables, with fallbacks for local development
+// Read configuration from environment variables
 const PORT = process.env.PORT || 3000;
 const DOMAIN = process.env.DOMAIN || `http://localhost:${PORT}`;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'a_very_insecure_default_secret_for_development';
