@@ -1,3 +1,4 @@
+require('dotenv').config(); // Must be at the very top to load environment variables
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -8,7 +9,10 @@ const crypto = require('crypto');
 const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
-const PORT = 3000;
+// Read configuration from environment variables, with fallbacks for local development
+const PORT = process.env.PORT || 3000;
+const DOMAIN = process.env.DOMAIN || `http://localhost:${PORT}`;
+const SESSION_SECRET = process.env.SESSION_SECRET || 'a_very_insecure_default_secret_for_development';
 
 // --- 1. Database Setup ---
 const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
@@ -24,10 +28,10 @@ db.serialize(() => {
 // --- 2. Middleware ---
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
-    secret: 'a-very-secret-key-that-is-long-and-random',
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }
+    cookie: { secure: process.env.NODE_ENV === 'production' } // Use secure cookies in production (requires HTTPS)
 }));
 app.use((req, res, next) => {
     res.locals.user = req.session.user;
@@ -98,7 +102,7 @@ function renderPage(res, bodyContent) {
             .file-actions { display: flex; gap: 10px; margin-left: auto; align-items: center; }
             .btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; color: white; font-weight: 500; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; font-family: 'Inter', sans-serif; font-size: 1rem; }
             .btn-primary { background-color: var(--primary-purple); } .btn-primary:hover { background-color: #9333ea; box-shadow: 0 0 20px var(--glow-purple); }
-            .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255,255,255,0.1); } .btn-secondary:hover { background-color: rgba(255, 255, 255, 0.2); border-color: rgba(255,255,255,0.3); }
+            .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255,255,255,0.1); } .btn-secondary:hover { background-color: var(--primary-purple); }
             .btn-danger { background-color: var(--danger-color); } .btn-danger:hover { background-color: #be123c; box-shadow: 0 0 20px var(--danger-glow); }
             .btn-success { background-color: var(--success-color); } .btn-success:hover { background-color: #166534; box-shadow: 0 0 20px var(--success-glow); }
             footer { text-align: center; margin-top: 60px; padding-top: 20px; color: var(--text-secondary); font-size: 0.9rem; }
@@ -163,7 +167,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                         </div>
                     </div>
                     <div class="share-link-container">
-                        <input type="text" readonly class="share-link-input" value="http://localhost:${PORT}/share/${f.id}">
+                        <input type="text" readonly class="share-link-input" value="${DOMAIN}/share/${f.id}">
                         <button class="copy-button">Copy</button>
                     </div>
                 </li>`;
@@ -349,5 +353,5 @@ app.post('/admin/users/delete', isAuthenticated, isAdmin, (req, res) => {
 
 // --- 8. Start Server ---
 app.listen(PORT, () => {
-    console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    console.log(`🚀 Server is running on port ${PORT}`);
 });
