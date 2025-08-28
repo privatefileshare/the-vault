@@ -20,36 +20,17 @@ const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqli
 });
 
 db.serialize(() => {
-    db.run(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'active',
-            last_login_ip TEXT
-        )
-    `);
-    db.run(`
-        CREATE TABLE IF NOT EXISTS files (
-            id TEXT PRIMARY KEY,
-            owner TEXT NOT NULL,
-            originalName TEXT NOT NULL,
-            storedName TEXT NOT NULL,
-            size INTEGER
-        )
-    `);
-    db.run(`
-        CREATE TABLE IF NOT EXISTS banned_ips (
-            ip TEXT PRIMARY KEY NOT NULL,
-            banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
+    db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT)`);
+    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER)`);
+    db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
 });
 
 // --- 2. Middleware ---
 app.set('trust proxy', 1);
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files like logos and favicons from the 'public' folder
+app.use(express.static('public'));
 
 app.use((req, res, next) => {
     const userIp = req.ip;
@@ -123,7 +104,9 @@ function renderPage(res, bodyContent) {
 
     res.send(`
         <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>The Vault</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <title>The Vault</title>
+        <link rel="icon" type="image/png" href="/favicon.png">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
             :root {
                 --primary-purple: #a855f7; --glow-purple: rgba(168, 85, 247, 0.5);
@@ -161,7 +144,10 @@ function renderPage(res, bodyContent) {
             input[type="text"], input[type="password"], input[type="file"] { background-color: var(--glass-bg); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
             .input-error { border-color: var(--danger-color) !important; box-shadow: 0 0 10px 1px var(--danger-glow) !important; }
             .error-message { color: var(--danger-color); font-size: 0.9rem; margin-top: -5px; text-align: left; }
-
+            .share-link-container { display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid var(--glass-border); padding-top: 15px; }
+            .share-link-input { flex-grow: 1; background-color: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: var(--text-secondary); padding: 8px 10px; border-radius: 6px; font-family: monospace; }
+            .copy-button { background-color: rgba(255, 255, 255, 0.1); color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; } .copy-button:hover { background-color: var(--primary-purple); }
+            
             @media (max-width: 768px) {
                 body { padding: 20px 10px; }
                 .page-title { font-size: 2rem; }
@@ -179,12 +165,32 @@ function renderPage(res, bodyContent) {
                 ${bodyContent}
                 <footer><p>&copy; ${new Date().getFullYear()} The Vault. All rights reserved.</p></footer>
             </div>
+            <script>
+                document.addEventListener('click', function(event) {
+                    if (event.target.classList.contains('copy-button')) {
+                        const input = event.target.previousElementSibling;
+                        input.select();
+                        input.setSelectionRange(0, 99999);
+                        document.execCommand('copy');
+                        event.target.textContent = 'Copied!';
+                        setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
+                    }
+                });
+            </script>
         </body></html>`);
 }
 
 // --- 5. Main Routes ---
 app.get('/', (req, res) => {
-    const bodyContent = `<main class="text-center"><h1 class="page-title" style="text-align:center;">The Vault</h1><p>Your personal corner of the cloud, secured and styled.</p><p style="margin-top: 40px;">${req.session.user ? '<a href="/my-files" class="btn btn-primary">Enter My Vault</a>' : '<a href="/login" class="btn btn-primary">Login to Enter</a>'}</p></main>`;
+    const bodyContent = `
+        <main class="text-center">
+            <img src="/logo.png" alt="The Vault Logo" style="max-width: 150px; margin-bottom: 20px;">
+            <h1 class="page-title" style="text-align:center;">The Vault</h1>
+            <p>Your personal corner of the cloud, secured and styled.</p>
+            <p style="margin-top: 40px;">
+                ${req.session.user ? '<a href="/my-files" class="btn btn-primary">Enter My Vault</a>' : '<a href="/login" class="btn btn-primary">Login to Enter</a>'}
+            </p>
+        </main>`;
     renderPage(res, bodyContent);
 });
 
@@ -209,6 +215,10 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                              </form>
                         </div>
                     </div>
+                    <div class="share-link-container">
+                        <input type="text" readonly class="share-link-input" value="${DOMAIN}/share/${f.id}">
+                        <button class="copy-button">Copy</button>
+                    </div>
                 </li>`;
         }).join('') + '</ul>' : '<p style="text-align:center;">Your vault is empty. Upload a file to get started.</p>';
         
@@ -217,6 +227,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
     });
 });
 
+// All other routes... (unchanged from the last complete script)
 app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => {
     if (!req.file) return res.status(400).send("No file uploaded.");
     const newFile = { id: crypto.randomBytes(16).toString('hex'), owner: req.session.user.username, originalName: req.file.originalname, storedName: req.file.filename, size: req.file.size };
@@ -248,7 +259,6 @@ app.get('/share/:id', (req, res) => {
     });
 });
 
-// --- 6. Authentication Routes ---
 app.get('/register', (req, res) => {
     const flash = res.locals.flash || {};
     const bodyContent = `<h2 class="section-header">Create Account</h2><form action="/register" method="post" class="glass-panel"><input type="text" name="username" placeholder="Username" required class="${flash.field === 'username' ? 'input-error' : ''}" value="${flash.inputValue || ''}">${flash.field === 'username' ? `<div class="error-message">${flash.message}</div>` : ''}<input type="password" name="password" placeholder="Password" required><input type="submit" class="btn btn-primary" value="Register"></form>`;
@@ -307,7 +317,6 @@ app.get('/logout', (req, res) => {
     });
 });
 
-// --- 7. Admin Routes ---
 app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
     db.all("SELECT * FROM users", [], (err, users) => {
         if (err) return res.status(500).send("Database error fetching users.");
@@ -329,17 +338,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                 }
                 return `<li class="file-item glass-panel"><div class="file-details"><span class="file-name">${user.username}</span><span class="file-description">Role: <strong>${user.role}</strong> | Status: <strong>${user.status}</strong></span></div><div class="file-actions">${actionsHtml}</div></li>`;
             }).join('') + '</ul>' : '<p style="text-align:center;">No users to manage.</p>';
-            const fileListHtml = allFiles.length > 0 ? '<ul class="file-list">' + allFiles.map(f => `
-                <li class="file-item"><div class="file-main-content">
-                        <div class="file-details">
-                            <span class="file-name">${f.originalName}</span>
-                            <span class="file-description">Uploaded by ${f.owner}</span>
-                        </div>
-                        <span class="file-size">${formatBytes(f.size)}</span>
-                        <div class="file-actions">
-                            <form action="/admin/files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;"><input type="hidden" name="fileId" value="${f.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
-                        </div>
-                </div></li>`).join('') + '</ul>' : '<p style="text-align:center;">No files to manage.</p>';
+            const fileListHtml = allFiles.length > 0 ? '<ul class="file-list">' + allFiles.map(f => `<li class="file-item glass-panel"><div class="file-main-content"><div class="file-details"><span class="file-name">${f.originalName}</span><span class="file-description">Uploaded by ${f.owner}</span></div><span class="file-size">${formatBytes(f.size)}</span><div class="file-actions"><form action="/admin/files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;"><input type="hidden" name="fileId" value="${f.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></div></li>`).join('') + '</ul>' : '<p style="text-align:center;">No files to manage.</p>';
             const bodyContent = `<main><div class="header"><h1>Admin Panel</h1></div><h2 class="section-header">Manage Users</h2>${userListHtml}<h2 class="section-header" style="margin-top: 40px;">Manage Files</h2>${fileListHtml}</main>`;
             renderPage(res, bodyContent);
         });
