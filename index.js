@@ -1,4 +1,4 @@
-require('dotenv').config(); // Must be at the very top
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -9,7 +9,6 @@ const crypto = require('crypto');
 const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
-// Read configuration from environment variables
 const PORT = process.env.PORT || 3000;
 const DOMAIN = process.env.DOMAIN || `http://localhost:${PORT}`;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'a_very_insecure_default_secret_for_development';
@@ -21,17 +20,57 @@ const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqli
 });
 
 db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active')`);
-    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL)`);
+    db.run(`
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            last_login_ip TEXT
+        )
+    `);
+    db.run(`
+        CREATE TABLE IF NOT EXISTS files (
+            id TEXT PRIMARY KEY,
+            owner TEXT NOT NULL,
+            originalName TEXT NOT NULL,
+            storedName TEXT NOT NULL,
+            size INTEGER
+        )
+    `);
+    db.run(`
+        CREATE TABLE IF NOT EXISTS banned_ips (
+            ip TEXT PRIMARY KEY NOT NULL,
+            banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
 });
 
 // --- 2. Middleware ---
+app.set('trust proxy', 1);
 app.use(express.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+    const userIp = req.ip;
+    db.get('SELECT ip FROM banned_ips WHERE ip = ?', [userIp], (err, row) => {
+        if (err) {
+            console.error("IP ban check database error:", err);
+            return next();
+        }
+        if (row) {
+            const bodyContent = `<main><h2 class="section-header">Access Denied</h2><p style="text-align: center; font-size: 1.1rem;">Your IP address has been banned.</p></main>`;
+            return renderPage(res, bodyContent);
+        }
+        next();
+    });
+});
+
 app.use(session({
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === 'production' } // Use secure cookies in production (requires HTTPS)
+    cookie: { secure: process.env.NODE_ENV === 'production' }
 }));
 app.use((req, res, next) => {
     res.locals.user = req.session.user;
@@ -53,7 +92,15 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// --- 3. Authentication Middleware ---
+// --- 3. Helper Functions & Middleware ---
+function formatBytes(bytes, decimals = 2) {
+    if (!+bytes) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
 const isAuthenticated = (req, res, next) => {
     if (!req.session.user) return res.redirect('/login');
     next();
@@ -100,6 +147,7 @@ function renderPage(res, bodyContent) {
             .file-name { display: block; font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
             .file-description { font-size: 0.9rem; color: var(--text-secondary); }
             .file-actions { display: flex; gap: 10px; margin-left: auto; align-items: center; }
+            .file-size { color: var(--text-secondary); font-size: 0.9rem; white-space: nowrap; }
             .btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; color: white; font-weight: 500; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; font-family: 'Inter', sans-serif; font-size: 1rem; }
             .btn-primary { background-color: var(--primary-purple); } .btn-primary:hover { background-color: #9333ea; box-shadow: 0 0 20px var(--glow-purple); }
             .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255,255,255,0.1); } .btn-secondary:hover { background-color: var(--primary-purple); }
@@ -111,13 +159,19 @@ function renderPage(res, bodyContent) {
             form { display: flex; flex-direction: column; gap: 15px; margin: 30px 0; padding: 25px; }
             .text-center { text-align: center; }
             input[type="text"], input[type="password"], input[type="file"] { background-color: var(--glass-bg); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
-            input[type="file"]::file-selector-button { background-color: rgba(255,255,255,0.1); color: var(--text-primary); border:none; padding: 8px; border-radius: 4px; cursor: pointer; }
-            input:focus { outline: none; border-color: var(--primary-purple); box-shadow: 0 0 10px 1px var(--glow-purple); }
-            .share-link-container { display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid var(--glass-border); padding-top: 15px; }
-            .share-link-input { flex-grow: 1; background-color: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: var(--text-secondary); padding: 8px 10px; border-radius: 6px; font-family: monospace; }
-            .copy-button { background-color: rgba(255, 255, 255, 0.1); color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; } .copy-button:hover { background-color: var(--primary-purple); }
             .input-error { border-color: var(--danger-color) !important; box-shadow: 0 0 10px 1px var(--danger-glow) !important; }
             .error-message { color: var(--danger-color); font-size: 0.9rem; margin-top: -5px; text-align: left; }
+
+            @media (max-width: 768px) {
+                body { padding: 20px 10px; }
+                .page-title { font-size: 2rem; }
+                .file-main-content { flex-direction: column; align-items: flex-start; gap: 15px; }
+                .file-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+                .file-item { padding: 15px; }
+                .file-size { padding-right: 0; margin-left: 10px; order: -1; align-self: flex-end; }
+                .file-details { width: 100%; }
+                .navbar { flex-wrap: wrap; }
+            }
         </style>
         </head><body>
             <div class="container">
@@ -125,18 +179,6 @@ function renderPage(res, bodyContent) {
                 ${bodyContent}
                 <footer><p>&copy; ${new Date().getFullYear()} The Vault. All rights reserved.</p></footer>
             </div>
-            <script>
-                document.addEventListener('click', function(event) {
-                    if (event.target.classList.contains('copy-button')) {
-                        const input = event.target.previousElementSibling;
-                        input.select();
-                        input.setSelectionRange(0, 99999);
-                        document.execCommand('copy');
-                        event.target.textContent = 'Copied!';
-                        setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
-                    }
-                });
-            </script>
         </body></html>`);
 }
 
@@ -156,8 +198,9 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <div class="file-main-content">
                         <div class="file-details">
                             <span class="file-name">${f.originalName}</span>
-                            <span class="file-description">Your private file, ready to share.</span>
+                            <span class="file-description">Your private file.</span>
                         </div>
+                        <span class="file-size">${formatBytes(f.size)}</span>
                         <div class="file-actions">
                              <a href="/share/${f.id}" class="btn btn-primary">Download</a>
                              <form action="/my-files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;">
@@ -165,10 +208,6 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                                  <button type="submit" class="btn btn-danger">Delete</button>
                              </form>
                         </div>
-                    </div>
-                    <div class="share-link-container">
-                        <input type="text" readonly class="share-link-input" value="${DOMAIN}/share/${f.id}">
-                        <button class="copy-button">Copy</button>
                     </div>
                 </li>`;
         }).join('') + '</ul>' : '<p style="text-align:center;">Your vault is empty. Upload a file to get started.</p>';
@@ -180,8 +219,8 @@ app.get('/my-files', isAuthenticated, (req, res) => {
 
 app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => {
     if (!req.file) return res.status(400).send("No file uploaded.");
-    const newFile = { id: crypto.randomBytes(16).toString('hex'), owner: req.session.user.username, originalName: req.file.originalname, storedName: req.file.filename };
-    db.run('INSERT INTO files (id, owner, originalName, storedName) VALUES (?, ?, ?, ?)', [newFile.id, newFile.owner, newFile.originalName, newFile.storedName], (err) => {
+    const newFile = { id: crypto.randomBytes(16).toString('hex'), owner: req.session.user.username, originalName: req.file.originalname, storedName: req.file.filename, size: req.file.size };
+    db.run('INSERT INTO files (id, owner, originalName, storedName, size) VALUES (?, ?, ?, ?, ?)', [newFile.id, newFile.owner, newFile.originalName, newFile.storedName, newFile.size], (err) => {
         if (err) return res.status(500).send("Could not save file information.");
         res.redirect('/my-files');
     });
@@ -251,6 +290,8 @@ app.post('/login', (req, res) => {
                 const bodyContent = `<main><h2 class="section-header">Access Denied</h2><p style="text-align: center; font-size: 1.1rem;">Your account has been banned by an administrator.</p></main>`;
                 return renderPage(res, bodyContent);
             }
+            const userIp = req.ip;
+            db.run('UPDATE users SET last_login_ip = ? WHERE username = ?', [userIp, username]);
             req.session.user = { username: user.username, role: user.role };
             res.redirect('/my-files');
         } else {
@@ -268,7 +309,7 @@ app.get('/logout', (req, res) => {
 
 // --- 7. Admin Routes ---
 app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
-    db.all("SELECT username, role, status FROM users", [], (err, users) => {
+    db.all("SELECT * FROM users", [], (err, users) => {
         if (err) return res.status(500).send("Database error fetching users.");
         db.all('SELECT * FROM files', [], (err, allFiles) => {
             if (err) return res.status(500).send("Database error fetching files.");
@@ -280,7 +321,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                 if (user.username !== req.session.user.username) {
                     actionsHtml += `<form action="/admin/users/status" method="post" style="margin:0; padding:0; background:none;"><input type="hidden" name="username" value="${user.username}"><input type="hidden" name="action" value="${action}"><button type="submit" class="btn ${buttonClass}">${action.charAt(0).toUpperCase() + action.slice(1)}</button></form>`;
                     if (user.role !== 'admin') {
-                        actionsHtml += `<form action="/admin/users/promote" method="post" onsubmit="return confirm('Are you sure you want to promote ${user.username} to an admin?');" style="margin:0; padding:0; background:none;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-primary">Promote</button></form>`;
+                        actionsHtml += `<form action="/admin/users/promote" method="post" onsubmit="return confirm('Are you sure you want to promote ${user.username} to an admin?');" style="margin:0; padding:0; background:none;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-secondary">Promote</button></form>`;
                     }
                     actionsHtml += `<form action="/admin/users/delete" method="post" onsubmit="return confirm('Are you sure you want to permanently delete user ${user.username} and all their files? This cannot be undone.');" style="margin:0; padding:0; background:none;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-danger">Delete</button></form>`;
                 } else {
@@ -288,7 +329,17 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                 }
                 return `<li class="file-item glass-panel"><div class="file-details"><span class="file-name">${user.username}</span><span class="file-description">Role: <strong>${user.role}</strong> | Status: <strong>${user.status}</strong></span></div><div class="file-actions">${actionsHtml}</div></li>`;
             }).join('') + '</ul>' : '<p style="text-align:center;">No users to manage.</p>';
-            const fileListHtml = allFiles.length > 0 ? '<ul class="file-list">' + allFiles.map(f => `<li class="file-item glass-panel"><div class="file-details"><span class="file-name">${f.originalName}</span><span class="file-description">Uploaded by ${f.owner}</span></div><div class="file-actions"><form action="/admin/files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;"><input type="hidden" name="fileId" value="${f.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`).join('') + '</ul>' : '<p style="text-align:center;">No files to manage.</p>';
+            const fileListHtml = allFiles.length > 0 ? '<ul class="file-list">' + allFiles.map(f => `
+                <li class="file-item"><div class="file-main-content">
+                        <div class="file-details">
+                            <span class="file-name">${f.originalName}</span>
+                            <span class="file-description">Uploaded by ${f.owner}</span>
+                        </div>
+                        <span class="file-size">${formatBytes(f.size)}</span>
+                        <div class="file-actions">
+                            <form action="/admin/files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;"><input type="hidden" name="fileId" value="${f.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
+                        </div>
+                </div></li>`).join('') + '</ul>' : '<p style="text-align:center;">No files to manage.</p>';
             const bodyContent = `<main><div class="header"><h1>Admin Panel</h1></div><h2 class="section-header">Manage Users</h2>${userListHtml}<h2 class="section-header" style="margin-top: 40px;">Manage Files</h2>${fileListHtml}</main>`;
             renderPage(res, bodyContent);
         });
@@ -314,6 +365,18 @@ app.post('/admin/users/status', isAuthenticated, isAdmin, (req, res) => {
     const { username, action } = req.body;
     const newStatus = action === 'ban' ? 'banned' : 'active';
     if (username === req.session.user.username) { return res.redirect('/admin'); }
+    
+    if (action === 'ban') {
+        db.get('SELECT last_login_ip FROM users WHERE username = ?', [username], (err, user) => {
+            if (user && user.last_login_ip) {
+                db.run('INSERT OR IGNORE INTO banned_ips (ip) VALUES (?)', [user.last_login_ip], (err) => {
+                    if (err) console.error("Failed to ban IP:", err);
+                    else console.log(`IP address ${user.last_login_ip} banned for user ${username}.`);
+                });
+            }
+        });
+    }
+    
     db.run("UPDATE users SET status = ? WHERE username = ?", [newStatus, username], (err) => {
         if (err) return res.status(500).send("Database error updating user status.");
         res.redirect('/admin');
