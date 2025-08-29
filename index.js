@@ -133,6 +133,7 @@ function renderPage(res, bodyContent, options = {}) {
             .file-name { display: block; font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
             .file-description { font-size: 0.9rem; color: var(--text-secondary); }
             .file-actions { display: flex; gap: 10px; margin-left: auto; align-items: center; }
+            .file-size { color: var(--text-secondary); font-size: 0.9rem; white-space: nowrap; }
             .btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; color: white; font-weight: 500; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; font-family: 'Inter', sans-serif; font-size: 1rem; }
             .btn-primary { background-color: var(--primary-purple); } .btn-primary:hover { background-color: #9333ea; box-shadow: 0 0 20px var(--glow-purple); }
             .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255,255,255,0.1); } .btn-secondary:hover { background-color: var(--primary-purple); }
@@ -140,16 +141,22 @@ function renderPage(res, bodyContent, options = {}) {
             .btn-success { background-color: var(--success-color); } .btn-success:hover { background-color: #166534; box-shadow: 0 0 20px var(--success-glow); }
             footer { text-align: center; margin-top: 60px; padding-top: 20px; color: var(--text-secondary); font-size: 0.9rem; }
             .navbar { display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 40px; padding: 15px; }
+            .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
             form { display: flex; flex-direction: column; gap: 15px; margin: 30px 0; padding: 25px; }
             .text-center { text-align: center; }
             input[type="text"], input[type="password"], input[type="file"] { background-color: var(--glass-bg); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
             .input-error { border-color: var(--danger-color) !important; box-shadow: 0 0 10px 1px var(--danger-glow) !important; }
             .error-message { color: var(--danger-color); font-size: 0.9rem; margin-top: -5px; text-align: left; }
-            .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
-            .modal-content { padding: 30px; width: 90%; max-width: 500px; }
-            .modal-content h3 { margin-top: 0; color: var(--primary-purple); }
-            .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-            @media (max-width: 768px) { /* Unchanged */ }
+            @media (max-width: 768px) {
+                body { padding: 20px 10px; }
+                .page-title { font-size: 2rem; }
+                .file-main-content { flex-direction: column; align-items: flex-start; gap: 15px; }
+                .file-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+                .file-item { padding: 15px; }
+                .file-size { padding-right: 0; margin-left: 10px; order: -1; align-self: flex-end; }
+                .file-details { width: 100%; }
+                .navbar { flex-wrap: wrap; }
+            }
         </style>
         </head><body>
             <div class="container">
@@ -157,51 +164,116 @@ function renderPage(res, bodyContent, options = {}) {
                 ${bodyContent}
                 <footer><p>&copy; ${new Date().getFullYear()} The Vault. All rights reserved.</p></footer>
             </div>
-            <div id="ban-modal" class="modal-overlay">
-                <div class="modal-content glass-panel">
-                    <h3>Provide Ban Reason</h3>
-                    <form id="ban-reason-form" method="post" action="/admin/users/status" style="margin: 0; padding: 0; background: none; box-shadow: none; border-radius: 0;">
-                        <input type="text" id="ban-reason-input" name="reason" placeholder="Reason for ban (e.g., spamming)" required>
-                        <input type="hidden" id="ban-username-input" name="username">
-                        <input type="hidden" name="action" value="ban">
-                        <div class="modal-actions">
-                            <button type="button" id="cancel-ban-btn" class="btn btn-secondary">Cancel</button>
-                            <button type="submit" class="btn btn-danger">Confirm Ban</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-            <script>
-                const banModal = document.getElementById('ban-modal');
-                const banReasonForm = document.getElementById('ban-reason-form');
-                const banUsernameInput = document.getElementById('ban-username-input');
-                const cancelBanBtn = document.getElementById('cancel-ban-btn');
-                document.addEventListener('click', function(event) {
-                    if (event.target.classList.contains('open-ban-modal')) {
-                        event.preventDefault();
-                        const username = event.target.dataset.username;
-                        banUsernameInput.value = username;
-                        banModal.style.display = 'flex';
-                    }
-                });
-                if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
-                if (banModal) { banModal.addEventListener('click', function(event) { if (event.target === banModal) { banModal.style.display = 'none'; } }); }
-            </script>
         </body></html>`);
 }
 
 // --- 5. Main Routes ---
-app.get('/', (req, res) => { /* Unchanged */ });
-app.get('/my-files', isAuthenticated, (req, res) => { /* Unchanged */ });
-app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => { /* Unchanged */ });
-app.post('/my-files/delete', isAuthenticated, (req, res) => { /* Unchanged */ });
-app.get('/share/:id', (req, res) => { /* Unchanged */ });
-app.get('/download/:id', (req, res) => { /* Unchanged */ });
+app.get('/', (req, res) => {
+    const bodyContent = `<main class="text-center"><h1 class="page-title" style="text-align:center;">The Vault</h1><p>Your personal corner of the cloud, secured and styled.</p><p style="margin-top: 40px;">${req.session.user ? '<a href="/my-files" class="btn btn-primary">Enter My Vault</a>' : '<a href="/login" class="btn btn-primary">Login to Enter</a>'}</p></main>`;
+    renderPage(res, bodyContent);
+});
+
+app.get('/my-files', isAuthenticated, (req, res) => {
+    db.all('SELECT * FROM files WHERE owner = ? ORDER BY originalName ASC', [req.session.user.username], (err, userFiles) => {
+        if (err) return res.status(500).send("Database error.");
+        const fileListHtml = userFiles.length > 0 ? '<ul class="file-list">' + userFiles.map(f => {
+            return `<li class="file-item glass-panel"><div class="file-main-content"><div class="file-details"><span class="file-name">${f.originalName}</span><span class="file-description">Your private file.</span></div><span class="file-size">${formatBytes(f.size)}</span><div class="file-actions"><a href="/share/${f.id}" class="btn btn-primary">Download</a><form action="/my-files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;"><input type="hidden" name="fileId" value="${f.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></div></li>`;
+        }).join('') + '</ul>' : '<p style="text-align:center;">Your vault is empty. Upload a file to get started.</p>';
+        const uploadForm = `<h2 class="section-header">Upload New File</h2><form action="/upload" method="post" enctype="multipart/form-data" class="glass-panel"><input type="file" name="sharedFile" required><input type="submit" class="btn btn-primary" value="Upload"></form>`;
+        renderPage(res, `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`);
+    });
+});
+
+app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => {
+    if (!req.file) return res.status(400).send("No file uploaded.");
+    const newFile = { id: crypto.randomBytes(16).toString('hex'), owner: req.session.user.username, originalName: req.file.originalname, storedName: req.file.filename, size: req.file.size };
+    db.run('INSERT INTO files (id, owner, originalName, storedName, size) VALUES (?, ?, ?, ?, ?)', [newFile.id, newFile.owner, newFile.originalName, newFile.storedName, newFile.size], (err) => {
+        if (err) return res.status(500).send("Could not save file information.");
+        res.redirect('/my-files');
+    });
+});
+
+app.post('/my-files/delete', isAuthenticated, (req, res) => {
+    const { fileId } = req.body;
+    db.get('SELECT * FROM files WHERE id = ? AND owner = ?', [fileId, req.session.user.username], (err, fileRecord) => {
+        if (err || !fileRecord) return res.status(403).send("File not found or you don't have permission.");
+        const filePath = path.join(UPLOAD_DIR, fileRecord.storedName);
+        fs.unlink(filePath, err => {
+            if (err) return res.status(500).send("Could not delete file from disk.");
+            db.run('DELETE FROM files WHERE id = ?', [fileId], (err) => {
+                if (err) return res.status(500).send("Could not delete file record.");
+                res.redirect('/my-files');
+            });
+        });
+    });
+});
+
+app.get('/share/:id', (req, res) => {
+    db.get('SELECT * FROM files WHERE id = ?', [req.params.id], (err, fileRecord) => {
+        if (err || !fileRecord) {
+            const bodyContent = `<main><h2 class="section-header">404 - Not Found</h2><p style="text-align: center;">The file does not exist or has been deleted.</p></main>`;
+            return renderPage(res, bodyContent, { title: 'File Not Found' });
+        }
+        let ogImage = `${DOMAIN}/logo.png`;
+        const mimeType = mime.lookup(fileRecord.originalName);
+        if (mimeType && mimeType.startsWith('image/')) {
+            ogImage = `${DOMAIN}/download/${fileRecord.id}`;
+        }
+        const bodyContent = `<main class="text-center"><h1 class="page-title" style="text-align:center;">Download File</h1><div class="glass-panel" style="padding: 25px;"><p style="font-size: 1.2rem;">${fileRecord.originalName}</p><p>Size: ${formatBytes(fileRecord.size)}</p><a href="/download/${fileRecord.id}" class="btn btn-primary" style="margin-top: 20px;">Download Now</a></div></main>`;
+        const extraScript = `<script>const isDiscordBot = navigator.userAgent.includes('Discordbot'); if (!isDiscordBot) { setTimeout(() => { window.location.href = "/download/${fileRecord.id}"; }, 1000); }</script>`;
+        renderPage(res, bodyContent, {
+            title: `Download ${fileRecord.originalName}`,
+            description: `File from The Vault. Size: ${formatBytes(fileRecord.size)}.`,
+            url: `${DOMAIN}/share/${fileRecord.id}`,
+            image: ogImage,
+            extraScript: extraScript
+        });
+    });
+});
+
+app.get('/download/:id', (req, res) => {
+    db.get('SELECT * FROM files WHERE id = ?', [req.params.id], (err, fileRecord) => {
+        if (err || !fileRecord) return res.status(404).send('File not found.');
+        res.download(path.join(UPLOAD_DIR, fileRecord.storedName), fileRecord.originalName);
+    });
+});
 
 // --- 6. Authentication Routes ---
-app.get('/register', (req, res) => { /* Unchanged */ });
-app.post('/register', (req, res) => { /* Unchanged */ });
-app.get('/login', (req, res) => { /* Unchanged */ });
+app.get('/register', (req, res) => {
+    const flash = res.locals.flash || {};
+    const bodyContent = `<h2 class="section-header">Create Account</h2><form action="/register" method="post" class="glass-panel"><input type="text" name="username" placeholder="Username" required class="${flash.field === 'username' ? 'input-error' : ''}" value="${flash.inputValue || ''}">${flash.field === 'username' ? `<div class="error-message">${flash.message}</div>` : ''}<input type="password" name="password" placeholder="Password" required><input type="submit" class="btn btn-primary" value="Register"></form>`;
+    renderPage(res, bodyContent);
+});
+
+app.post('/register', (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password || password.length < 8) {
+        req.session.flash = { type: 'error', message: 'Username is required and password must be at least 8 characters.', field: 'username', inputValue: username };
+        return res.redirect('/register');
+    }
+    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, row) => {
+        if (err) return res.status(500).send("Database error.");
+        if (row) {
+            req.session.flash = { type: 'error', message: 'That username is already taken.', field: 'username', inputValue: username };
+            return res.redirect('/register');
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+        db.get('SELECT COUNT(*) as count FROM users', [], (err, result) => {
+            if (err) return res.status(500).send("Database error.");
+            const role = result.count === 0 ? 'admin' : 'user';
+            db.run('INSERT INTO users (username, password, role, status) VALUES (?, ?, ?, ?)', [username, hashedPassword, role, 'active'], (err) => {
+                if (err) return res.status(500).send("Could not register user.");
+                res.redirect('/login');
+            });
+        });
+    });
+});
+
+app.get('/login', (req, res) => {
+    const flash = res.locals.flash || {};
+    const bodyContent = `<h2 class="section-header">Welcome Back</h2><form action="/login" method="post" class="glass-panel"><input type="text" name="username" placeholder="Username" required class="${flash.field === 'all' ? 'input-error' : ''}" value="${flash.inputValue || ''}"><input type="password" name="password" placeholder="Password" required class="${flash.field === 'all' ? 'input-error' : ''}">${flash.field === 'all' ? `<div class="error-message">${flash.message}</div>` : ''}<input type="submit" class="btn btn-primary" value="Login"></form>`;
+    renderPage(res, bodyContent);
+});
 
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
@@ -209,18 +281,8 @@ app.post('/login', (req, res) => {
         if (err) return res.status(500).send("Database error.");
         if (user && await bcrypt.compare(password, user.password)) {
             if (user.status === 'banned') {
-                const reason = user.ban_reason || "No specific reason was provided";
-                const bodyContent = `
-                    <main class="text-center">
-                        <div class="glass-panel" style="padding: 40px;">
-                            <h1 class="page-title" style="text-align:center; font-size: 3rem;">🚫</h1>
-                            <h2 class="section-header">Account Banned</h2>
-                            <p style="font-size: 1.1rem; color: var(--text-primary);">You have been banned by an administrator.</p>
-                            <p style="color: var(--text-secondary); margin-top: 20px; border-top: 1px solid var(--glass-border); padding-top: 20px;">
-                                <strong>Reason:</strong> ${reason}
-                            </p>
-                        </div>
-                    </main>`;
+                const reason = user.ban_reason || "No reason provided";
+                const bodyContent = `<main class="text-center"><div class="glass-panel" style="padding: 40px;"><h1 class="page-title" style="text-align:center; font-size: 3rem;">🚫</h1><h2 class="section-header">Account Banned</h2><p>You have been banned by an administrator.</p><p style="color: var(--text-secondary); margin-top: 20px; border-top: 1px solid var(--glass-border); padding-top: 20px;"><strong>Reason:</strong> ${reason}</p></div></main>`;
                 return renderPage(res, bodyContent, { title: 'Account Banned' });
             }
             const userIp = req.ip;
@@ -234,7 +296,12 @@ app.post('/login', (req, res) => {
         }
     });
 });
-app.get('/logout', (req, res) => { /* Unchanged */ });
+
+app.get('/logout', (req, res) => {
+    req.session.destroy(() => {
+        res.redirect('/');
+    });
+});
 
 // --- 7. Admin Routes ---
 app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
@@ -242,7 +309,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
         if (err) return res.status(500).send("Database error fetching users.");
         db.all('SELECT * FROM files', [], (err, allFiles) => {
             if (err) return res.status(500).send("Database error fetching files.");
-            const userListHtml = users.length > 0 ? '<ul>' + users.map(user => {
+            const userListHtml = users.length > 0 ? '<ul class="file-list">' + users.map(user => {
                 const isBanned = user.status === 'banned';
                 let actionsHtml = '';
                 if (user.username !== req.session.user.username) {
@@ -259,10 +326,25 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                     actionsHtml = '<span style="color: var(--text-secondary);">(This is you)</span>';
                 }
                 return `<li class="file-item glass-panel"><div class="file-details"><span class="file-name">${user.username}</span><span class="file-description">Role: <strong>${user.role}</strong> | Status: <strong>${user.status}</strong></span></div><div class="file-actions">${actionsHtml}</div></li>`;
-            }).join('') + '</ul>' : '<p>No users to manage.</p>';
-            const fileListHtml = allFiles.length > 0 ? '<ul>' + allFiles.map(f => `...`).join('') + '</ul>' : '<p>No files to manage.</p>';
-            const bodyContent = `<main>...${userListHtml}...${fileListHtml}</main>`;
+            }).join('') + '</ul>' : '<p style="text-align:center;">No other users to manage.</p>';
+            const fileListHtml = allFiles.length > 0 ? '<ul class="file-list">' + allFiles.map(f => `<li class="file-item glass-panel"><div class="file-main-content"><div class="file-details"><span class="file-name">${f.originalName}</span><span class="file-description">Uploaded by ${f.owner}</span></div><span class="file-size">${formatBytes(f.size)}</span><div class="file-actions"><form action="/admin/files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;"><input type="hidden" name="fileId" value="${f.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></div></li>`).join('') + '</ul>' : '<p style="text-align:center;">No files to manage.</p>';
+            const bodyContent = `<main><div class="header"><h1>Admin Panel</h1></div><h2 class="section-header">Manage Users</h2>${userListHtml}<h2 class="section-header" style="margin-top: 40px;">Manage Files</h2>${fileListHtml}</main>`;
             renderPage(res, bodyContent);
+        });
+    });
+});
+
+app.post('/admin/files/delete', isAuthenticated, isAdmin, (req, res) => {
+    const { fileId } = req.body;
+    db.get('SELECT storedName FROM files WHERE id = ?', [fileId], (err, fileRecord) => {
+        if (err || !fileRecord) return res.status(404).send("File not found.");
+        const filePath = path.join(UPLOAD_DIR, fileRecord.storedName);
+        fs.unlink(filePath, err => {
+            if (err) return res.status(500).send("Could not delete file from disk.");
+            db.run('DELETE FROM files WHERE id = ?', [fileId], (err) => {
+                if (err) return res.status(500).send("Could not delete file record.");
+                res.redirect('/admin');
+            });
         });
     });
 });
@@ -284,9 +366,36 @@ app.post('/admin/users/status', isAuthenticated, isAdmin, (req, res) => {
     });
 });
 
-app.post('/admin/users/promote', isAuthenticated, isAdmin, (req, res) => { /* Unchanged */ });
-app.post('/admin/users/delete', isAuthenticated, isAdmin, (req, res) => { /* Unchanged */ });
-app.post('/admin/files/delete', isAuthenticated, isAdmin, (req, res) => { /* Unchanged */ });
+app.post('/admin/users/promote', isAuthenticated, isAdmin, (req, res) => {
+    const { username } = req.body;
+    db.run("UPDATE users SET role = 'admin' WHERE username = ?", [username], (err) => {
+        if (err) return res.status(500).send("Database error promoting user.");
+        res.redirect('/admin');
+    });
+});
+
+app.post('/admin/users/delete', isAuthenticated, isAdmin, (req, res) => {
+    const { username } = req.body;
+    if (username === req.session.user.username) { return res.redirect('/admin'); }
+    db.all('SELECT storedName FROM files WHERE owner = ?', [username], (err, files) => {
+        if (err) return res.status(500).send("Error finding user's files.");
+        const deletionPromises = files.map(file => new Promise((resolve) => {
+            fs.unlink(path.join(UPLOAD_DIR, file.storedName), (err) => {
+                if (err) console.error(`Failed to delete ${file.storedName}:`, err);
+                resolve();
+            });
+        }));
+        Promise.all(deletionPromises).then(() => {
+            db.run('DELETE FROM files WHERE owner = ?', [username], (err) => {
+                if (err) return res.status(500).send("Error deleting user's file records.");
+                db.run('DELETE FROM users WHERE username = ?', [username], (err) => {
+                    if (err) return res.status(500).send("Error deleting user.");
+                    res.redirect('/admin');
+                });
+            });
+        });
+    });
+});
 
 // --- 8. Start Server ---
 app.listen(PORT, () => {
