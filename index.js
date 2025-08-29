@@ -189,107 +189,109 @@ function renderPage(res, bodyContent, options = {}) {
                 </div>
             </div>
             <script>
-                // Delegated click listener for buttons
-                document.addEventListener('click', function(event) {
-                    // Copy Button Logic
-                    if (event.target.classList.contains('copy-button')) {
-                        const input = event.target.previousElementSibling;
-                        input.select();
-                        input.setSelectionRange(0, 99999);
-                        document.execCommand('copy');
-                        event.target.textContent = 'Copied!';
-                        setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
-                    }
-                    // Ban Modal Trigger Logic
-                    if (event.target.classList.contains('open-ban-modal')) {
-                        event.preventDefault();
-                        const banModal = document.getElementById('ban-modal');
-                        const banUsernameInput = document.getElementById('ban-username-input');
-                        if (banModal && banUsernameInput) {
-                            const username = event.target.dataset.username;
-                            banUsernameInput.value = username;
-                            banModal.style.display = 'flex';
+                document.addEventListener('DOMContentLoaded', () => {
+                    // Delegated click listener for buttons that might appear on the page
+                    document.body.addEventListener('click', event => {
+                        // Copy Button Logic
+                        if (event.target.classList.contains('copy-button')) {
+                            const input = event.target.previousElementSibling;
+                            input.select();
+                            input.setSelectionRange(0, 99999);
+                            document.execCommand('copy');
+                            event.target.textContent = 'Copied!';
+                            setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
                         }
-                    }
-                });
+                        // Ban Modal Trigger Logic
+                        if (event.target.classList.contains('open-ban-modal')) {
+                            event.preventDefault();
+                            const banModal = document.getElementById('ban-modal');
+                            const banUsernameInput = document.getElementById('ban-username-input');
+                            if (banModal && banUsernameInput) {
+                                const username = event.target.dataset.username;
+                                banUsernameInput.value = username;
+                                banModal.style.display = 'flex';
+                            }
+                        }
+                    });
 
-                // Ban Modal Close Logic
-                const banModal = document.getElementById('ban-modal');
-                if (banModal) {
-                    const cancelBanBtn = document.getElementById('cancel-ban-btn');
-                    if (cancelBanBtn) {
-                        cancelBanBtn.addEventListener('click', () => {
-                            banModal.style.display = 'none';
+                    // Logic for specific elements that only exist on certain pages
+                    const banModal = document.getElementById('ban-modal');
+                    if (banModal) {
+                        const cancelBanBtn = document.getElementById('cancel-ban-btn');
+                        if (cancelBanBtn) {
+                            cancelBanBtn.addEventListener('click', () => {
+                                banModal.style.display = 'none';
+                            });
+                        }
+                        banModal.addEventListener('click', function(event) {
+                            if (event.target === banModal) {
+                                banModal.style.display = 'none';
+                            }
                         });
                     }
-                    banModal.addEventListener('click', function(event) {
-                        if (event.target === banModal) {
-                            banModal.style.display = 'none';
-                        }
-                    });
-                }
-                
-                // File Input & Progress Bar Logic
-                const uploadForm = document.getElementById('upload-form');
-                if (uploadForm) {
-                    const fileInput = document.getElementById('sharedFile');
-                    const fileNameDisplay = document.getElementById('file-name-display');
-                    
-                    fileInput.addEventListener('change', () => {
-                        if (fileInput.files.length > 0) {
-                            fileNameDisplay.textContent = fileInput.files[0].name;
-                            fileNameDisplay.style.fontStyle = 'normal';
-                        } else {
-                            fileNameDisplay.textContent = 'No file selected.';
-                            fileNameDisplay.style.fontStyle = 'italic';
-                        }
-                    });
 
-                    uploadForm.addEventListener('submit', function(event) {
-                        event.preventDefault();
-                        const progressBarContainer = this.querySelector('.progress-bar-container');
-                        const progressBar = this.querySelector('.progress-bar');
-                        const submitButton = this.querySelector('input[type="submit"]');
-
-                        progressBarContainer.style.display = 'block';
-                        submitButton.disabled = true;
-                        submitButton.value = 'Uploading...';
-
-                        const formData = new FormData(this);
-                        const xhr = new XMLHttpRequest();
-
-                        xhr.open('POST', '/upload', true);
+                    const uploadForm = document.getElementById('upload-form');
+                    if (uploadForm) {
+                        const fileInput = document.getElementById('sharedFile');
+                        const fileNameDisplay = document.getElementById('file-name-display');
                         
-                        xhr.upload.addEventListener('progress', function(e) {
-                            if (e.lengthComputable) {
-                                const percentComplete = (e.loaded / e.total) * 100;
-                                progressBar.style.width = percentComplete + '%';
+                        fileInput.addEventListener('change', () => {
+                            if (fileInput.files.length > 0) {
+                                fileNameDisplay.textContent = fileInput.files[0].name;
+                                fileNameDisplay.style.fontStyle = 'normal';
+                            } else {
+                                fileNameDisplay.textContent = 'No file selected.';
+                                fileNameDisplay.style.fontStyle = 'italic';
                             }
                         });
 
-                        xhr.onload = function() {
-                            if (xhr.status === 200) {
-                                window.location.href = '/my-files';
-                            } else {
-                                alert('Upload failed. Please try again.');
+                        uploadForm.addEventListener('submit', function(event) {
+                            event.preventDefault();
+                            const progressBarContainer = this.querySelector('.progress-bar-container');
+                            const progressBar = this.querySelector('.progress-bar');
+                            const submitButton = this.querySelector('input[type="submit"]');
+
+                            progressBarContainer.style.display = 'block';
+                            progressBar.style.width = '0%';
+                            submitButton.disabled = true;
+                            submitButton.value = 'Uploading...';
+
+                            const formData = new FormData(this);
+                            const xhr = new XMLHttpRequest();
+
+                            xhr.open('POST', '/upload', true);
+                            
+                            xhr.upload.addEventListener('progress', function(e) {
+                                if (e.lengthComputable) {
+                                    const percentComplete = (e.loaded / e.total) * 100;
+                                    progressBar.style.width = percentComplete + '%';
+                                }
+                            });
+
+                            xhr.onload = function() {
+                                if (xhr.status === 200) {
+                                    window.location.href = '/my-files';
+                                } else {
+                                    alert('Upload failed. Please try again.');
+                                    progressBarContainer.style.display = 'none';
+                                    progressBar.style.width = '0%';
+                                    submitButton.disabled = false;
+                                    submitButton.value = 'Upload File';
+                                }
+                            };
+                            
+                            xhr.onerror = function() {
+                                alert('An error occurred during the upload. Please try again.');
                                 progressBarContainer.style.display = 'none';
                                 progressBar.style.width = '0%';
                                 submitButton.disabled = false;
                                 submitButton.value = 'Upload File';
-                            }
-                        };
-                        
-                        xhr.onerror = function() {
-                            alert('An error occurred during the upload. Please try again.');
-                            progressBarContainer.style.display = 'none';
-                            progressBar.style.width = '0%';
-                            submitButton.disabled = false;
-                            submitButton.value = 'Upload File';
-                        };
+                            };
 
-                        xhr.send(formData);
-                    });
-                }
+                            xhr.send(formData);
+                        });
+                    }
+                });
             </script>
         </body></html>`);
 }
