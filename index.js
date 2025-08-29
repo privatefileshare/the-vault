@@ -7,9 +7,6 @@ const session = require('express-session');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const sqlite3 = require('sqlite3').verbose();
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const mime = require('mime-types');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,71 +20,71 @@ const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqli
 });
 
 db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT, last_fingerprint TEXT, ban_reason TEXT)`);
-    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, embed_type TEXT NOT NULL DEFAULT 'card')`);
+    db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT)`);
+    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER)`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
-    db.run(`CREATE TABLE IF NOT EXISTS banned_fingerprints (fingerprint TEXT PRIMARY KEY NOT NULL, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
 });
 
-// --- 2. Security & Core Middleware ---
+// --- 2. Middleware ---
 app.set('trust proxy', 1);
-app.use(helmet());
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-7', legacyHeaders: false }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-function generateFingerprint(req) {
-    const userAgent = req.headers['user-agent'] || '';
-    const acceptLanguage = req.headers['accept-language'] || '';
-    const fingerprintString = `${userAgent}${acceptLanguage}`;
-    return crypto.createHash('sha256').update(fingerprintString).digest('hex');
-}
-
 app.use((req, res, next) => {
     const userIp = req.ip;
-    const fingerprint = generateFingerprint(req);
-    db.get('SELECT ip FROM banned_ips WHERE ip = ?', [userIp], (err, ipRow) => {
+    db.get('SELECT ip FROM banned_ips WHERE ip = ?', [userIp], (err, row) => {
         if (err) return next();
-        if (ipRow) {
-            const bodyContent = `<main class="text-center"><h1 class="page-title" style="text-align:center;">Access Denied</h1><p>Your IP address has been banned.</p></main>`;
+        if (row) {
+            const bodyContent = `<main><h2 class="section-header">Access Denied</h2><p style="text-align: center; font-size: 1.1rem;">Your IP address has been banned.</p></main>`;
             return renderPage(res, bodyContent, { title: 'Access Denied' });
         }
-        db.get('SELECT fingerprint FROM banned_fingerprints WHERE fingerprint = ?', [fingerprint], (err, fpRow) => {
-            if (err) return next();
-            if (fpRow) {
-                const bodyContent = `<main class="text-center"><h1 class="page-title" style="text-align:center;">Access Denied</h1><p>Your device has been banned.</p></main>`;
-                return renderPage(res, bodyContent, { title: 'Access Denied' });
-            }
-            next();
-        });
+        next();
     });
 });
 
-app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'strict' } }));
+app.use(session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: process.env.NODE_ENV === 'production' }
+}));
 app.use((req, res, next) => {
     res.locals.user = req.session.user;
-    if (req.session.flash) { res.locals.flash = req.session.flash; delete req.session.flash; }
+    if (req.session.flash) {
+        res.locals.flash = req.session.flash;
+        delete req.session.flash;
+    }
     next();
 });
 
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
-const upload = multer({
-    storage: multer.diskStorage({
-        destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-        filename: (req, file, cb) => {
-            const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            const cleanFilename = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '');
-            cb(null, uniquePrefix + '-' + cleanFilename);
-        }
-    }),
-    limits: { fileSize: 500 * 1024 * 1024 }
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+    filename: (req, file, cb) => {
+        const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniquePrefix + '-' + file.originalname);
+    }
 });
+const upload = multer({ storage: storage });
 
 // --- 3. Helper Functions & Middleware ---
-function formatBytes(bytes, decimals = 2) { if (!+bytes) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ["Bytes", "KB", "MB", "GB", "TB"]; const i = Math.floor(Math.log(bytes) / Math.log(k)); return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`; }
-const isAuthenticated = (req, res, next) => { if (!req.session.user) return res.redirect('/login'); next(); };
-const isAdmin = (req, res, next) => { if (req.session.user && req.session.user.role === 'admin') return next(); res.status(403).send('<h1>403 Forbidden</h1>'); };
+function formatBytes(bytes, decimals = 2) {
+    if (!+bytes) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+const isAuthenticated = (req, res, next) => {
+    if (!req.session.user) return res.redirect('/login');
+    next();
+};
+const isAdmin = (req, res, next) => {
+    if (req.session.user && req.session.user.role === 'admin') return next();
+    res.status(403).send('<h1>403 Forbidden</h1>');
+};
 
 // --- 4. Page Rendering ---
 function renderPage(res, bodyContent, options = {}) {
@@ -103,10 +100,17 @@ function renderPage(res, bodyContent, options = {}) {
     res.send(`
         <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${options.title || 'The Vault'}</title>
+        <meta name="description" content="${options.description || 'Your personal corner of the cloud, secured and styled.'}">
         <link rel="icon" type="image/png" href="/favicon.png">
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
-            :root { --primary-purple: #a855f7; --glow-purple: rgba(168, 85, 247, 0.5); --text-primary: #e5e7eb; --text-secondary: #9ca3af; --glass-bg: rgba(255, 255, 255, 0.05); --glass-border: rgba(255, 255, 255, 0.1); --danger-color: #f43f5e; --danger-glow: rgba(244, 63, 94, 0.5); --success-color: #28a745; --success-glow: rgba(40, 167, 69, 0.5); }
+            :root {
+                --primary-purple: #a855f7; --glow-purple: rgba(168, 85, 247, 0.5);
+                --text-primary: #e5e7eb; --text-secondary: #9ca3af;
+                --glass-bg: rgba(255, 255, 255, 0.05); --glass-border: rgba(255, 255, 255, 0.1);
+                --danger-color: #f43f5e; --danger-glow: rgba(244, 63, 94, 0.5);
+                --success-color: #28a745; --success-glow: rgba(40, 167, 69, 0.5);
+            }
             *, *::before, *::after { box-sizing: border-box; }
             @keyframes rotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
             body { font-family: 'Inter', sans-serif; margin: 0; padding: 40px 20px; background-color: #030712; color: var(--text-primary); overflow-x: hidden; position: relative; min-height: 100vh; }
@@ -136,9 +140,26 @@ function renderPage(res, bodyContent, options = {}) {
             input[type="text"], input[type="password"] { background-color: var(--glass-bg); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
             .input-error { border-color: var(--danger-color) !important; box-shadow: 0 0 10px 1px var(--danger-glow) !important; }
             .error-message { color: var(--danger-color); font-size: 0.9rem; margin-top: -5px; text-align: left; }
-            .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
-            .modal-content { padding: 30px; width: 90%; max-width: 500px; }
-            .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+            .share-link-container { display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid var(--glass-border); padding-top: 15px; }
+            .share-link-input { flex-grow: 1; background-color: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: var(--text-secondary); padding: 8px 10px; border-radius: 6px; font-family: monospace; }
+            .copy-button { background-color: rgba(255, 255, 255, 0.1); color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; } .copy-button:hover { background-color: var(--primary-purple); }
+
+            /* --- NEW STYLES for "Fancier" File Input --- */
+            .upload-area { cursor: pointer; border: 2px dashed var(--glass-border); border-radius: 12px; padding: 40px 20px; text-align: center; transition: border-color 0.2s, background-color 0.2s; }
+            .upload-area:hover { border-color: var(--primary-purple); background-color: rgba(168, 85, 247, 0.1); }
+            .upload-icon { font-size: 2.5rem; }
+            #file-name-display { margin-top: 10px; color: var(--text-secondary); font-style: italic; }
+
+            @media (max-width: 768px) {
+                body { padding: 20px 10px; }
+                .page-title { font-size: 2rem; }
+                .file-main-content { flex-direction: column; align-items: flex-start; gap: 15px; }
+                .file-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+                .file-item { padding: 15px; }
+                .file-size { padding-right: 0; margin-left: 10px; order: -1; align-self: flex-end; }
+                .file-details { width: 100%; }
+                .navbar { flex-wrap: wrap; }
+            }
         </style>
         </head><body>
             <div class="container">
@@ -146,49 +167,31 @@ function renderPage(res, bodyContent, options = {}) {
                 ${bodyContent}
                 <footer><p>&copy; ${new Date().getFullYear()} The Vault. All rights reserved.</p></footer>
             </div>
-            <div id="ban-modal" class="modal-overlay">
-                <div class="modal-content glass-panel">
-                    <h3>Provide Ban Reason</h3>
-                    <form id="ban-reason-form" method="post" action="/admin/users/status" style="margin: 0; padding: 0; background: none; box-shadow: none; border-radius: 0;">
-                        <input type="text" id="ban-reason-input" name="reason" placeholder="Reason for ban (e.g., spamming)" required>
-                        <input type="hidden" id="ban-username-input" name="username">
-                        <input type="hidden" name="action" value="ban">
-                        <div class="modal-actions">
-                            <button type="button" id="cancel-ban-btn" class="btn btn-secondary">Cancel</button>
-                            <button type="submit" class="btn btn-danger">Confirm Ban</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
             <script>
-                document.addEventListener('DOMContentLoaded', () => {
-                    document.body.addEventListener('click', event => {
-                        if (event.target.classList.contains('open-ban-modal')) {
-                            event.preventDefault();
-                            const banModal = document.getElementById('ban-modal');
-                            const banUsernameInput = document.getElementById('ban-username-input');
-                            if (banModal && banUsernameInput) {
-                                const username = event.target.dataset.username;
-                                banUsernameInput.value = username;
-                                banModal.style.display = 'flex';
-                            }
-                        }
-                    });
-                    const banModal = document.getElementById('ban-modal');
-                    if (banModal) {
-                        const cancelBanBtn = document.getElementById('cancel-ban-btn');
-                        if (cancelBanBtn) {
-                            cancelBanBtn.addEventListener('click', () => {
-                                banModal.style.display = 'none';
-                            });
-                        }
-                        banModal.addEventListener('click', function(event) {
-                            if (event.target === banModal) {
-                                banModal.style.display = 'none';
-                            }
-                        });
+                document.addEventListener('click', function(event) {
+                    if (event.target.classList.contains('copy-button')) {
+                        const input = event.target.previousElementSibling;
+                        input.select();
+                        input.setSelectionRange(0, 99999);
+                        document.execCommand('copy');
+                        event.target.textContent = 'Copied!';
+                        setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
                     }
                 });
+
+                const fileInput = document.getElementById('sharedFile');
+                const fileNameDisplay = document.getElementById('file-name-display');
+                if(fileInput && fileNameDisplay) {
+                    fileInput.addEventListener('change', function() {
+                        if (this.files.length > 0) {
+                            fileNameDisplay.textContent = this.files[0].name;
+                            fileNameDisplay.style.fontStyle = 'normal';
+                        } else {
+                            fileNameDisplay.textContent = 'No file selected.';
+                            fileNameDisplay.style.fontStyle = 'italic';
+                        }
+                    });
+                }
             </script>
         </body></html>`);
 }
@@ -196,28 +199,157 @@ function renderPage(res, bodyContent, options = {}) {
 // --- 5. Main Routes ---
 app.get('/', (req, res) => {
     const bodyContent = `<main class="text-center"><h1 class="page-title" style="text-align:center;">The Vault</h1><p>Your personal corner of the cloud, secured and styled.</p><p style="margin-top: 40px;">${req.session.user ? '<a href="/my-files" class="btn btn-primary">Enter My Vault</a>' : '<a href="/login" class="btn btn-primary">Login to Enter</a>'}</p></main>`;
-    renderPage(res, bodyContent);
+    renderPage(res, bodyContent, {
+        title: 'The Vault',
+        description: 'Your personal corner of the cloud, secured and styled.',
+        url: DOMAIN
+    });
 });
 
 app.get('/my-files', isAuthenticated, (req, res) => {
     db.all('SELECT * FROM files WHERE owner = ? ORDER BY originalName ASC', [req.session.user.username], (err, userFiles) => {
         if (err) return res.status(500).send("Database error.");
-        const fileListHtml = `...`; // Unchanged
-        const uploadForm = `...`; // Unchanged
+        
+        const fileListHtml = userFiles.length > 0 ? '<ul class="file-list">' + userFiles.map(f => {
+            return `
+                <li class="file-item">
+                    <div class="file-main-content">
+                        <div class="file-details">
+                            <span class="file-name">${f.originalName}</span>
+                            <span class="file-description">Your private file, ready to share.</span>
+                        </div>
+                        <span class="file-size">${formatBytes(f.size)}</span>
+                        <div class="file-actions">
+                             <a href="/share/${f.id}" class="btn btn-primary">Download</a>
+                             <form action="/my-files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;">
+                                 <input type="hidden" name="fileId" value="${f.id}">
+                                 <button type="submit" class="btn btn-danger">Delete</button>
+                             </form>
+                        </div>
+                    </div>
+                    <div class="share-link-container">
+                        <input type="text" readonly class="share-link-input" value="${DOMAIN}/share/${f.id}">
+                        <button class="copy-button">Copy</button>
+                    </div>
+                </li>`;
+        }).join('') + '</ul>' : '<p style="text-align:center;">Your vault is empty. Upload a file to get started.</p>';
+        
+        const uploadForm = `
+            <h2 class="section-header">Upload New File</h2>
+            <form action="/upload" method="post" enctype="multipart/form-data" class="glass-panel">
+                <label for="sharedFile" class="upload-area">
+                    <span class="upload-icon">☁️</span>
+                    <span>Drag & drop your file here, or click to browse</span>
+                    <span id="file-name-display">No file selected.</span>
+                    <input type="file" name="sharedFile" id="sharedFile" required style="display: none;">
+                </label>
+                <input type="submit" class="btn btn-primary" value="Upload File">
+            </form>`;
         renderPage(res, `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`);
     });
 });
 
-app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => { /* Unchanged */ });
-app.post('/my-files/delete', isAuthenticated, (req, res) => { /* Unchanged */ });
-app.get('/share/:id', (req, res) => { /* Unchanged */ });
-app.get('/download/:id', (req, res) => { /* Unchanged */ });
-app.post('/files/toggle-embed', isAuthenticated, (req, res) => { /* Unchanged */ });
+// ... All other routes are unchanged and complete ...
+app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => {
+    if (!req.file) return res.status(400).send("No file uploaded.");
+    const newFile = { id: crypto.randomBytes(16).toString('hex'), owner: req.session.user.username, originalName: req.file.originalname, storedName: req.file.filename, size: req.file.size };
+    db.run('INSERT INTO files (id, owner, originalName, storedName, size) VALUES (?, ?, ?, ?, ?)', [newFile.id, newFile.owner, newFile.originalName, newFile.storedName, newFile.size], (err) => {
+        if (err) return res.status(500).send("Could not save file information.");
+        res.redirect('/my-files');
+    });
+});
 
-// --- 6. Authentication Routes ---
-app.get('/register', (req, res) => { /* Unchanged */ });
-app.post('/register', (req, res) => { /* Unchanged */ });
-app.get('/login', (req, res) => { /* Unchanged */ });
+app.post('/my-files/delete', isAuthenticated, (req, res) => {
+    const { fileId } = req.body;
+    db.get('SELECT * FROM files WHERE id = ? AND owner = ?', [fileId, req.session.user.username], (err, fileRecord) => {
+        if (err || !fileRecord) return res.status(403).send("File not found or you don't have permission.");
+        const filePath = path.join(UPLOAD_DIR, fileRecord.storedName);
+        fs.unlink(filePath, err => {
+            if (err) return res.status(500).send("Could not delete file from disk.");
+            db.run('DELETE FROM files WHERE id = ?', [fileId], (err) => {
+                if (err) return res.status(500).send("Could not delete file record.");
+                res.redirect('/my-files');
+            });
+        });
+    });
+});
+
+app.get('/share/:id', (req, res) => {
+    db.get('SELECT * FROM files WHERE id = ?', [req.params.id], (err, fileRecord) => {
+        if (err || !fileRecord) {
+            const bodyContent = `<main><h2 class="section-header">404 - Not Found</h2><p style="text-align: center;">The file you are looking for does not exist or has been deleted.</p></main>`;
+            return renderPage(res, bodyContent, { title: 'File Not Found' });
+        }
+        
+        const bodyContent = `
+            <main class="text-center">
+                <h1 class="page-title" style="text-align:center;">Download File</h1>
+                <div class="glass-panel" style="padding: 25px;">
+                    <p style="font-size: 1.2rem; color: var(--text-primary);">${fileRecord.originalName}</p>
+                    <p style="color: var(--text-secondary);">Size: ${formatBytes(fileRecord.size)}</p>
+                    <a href="/download/${fileRecord.id}" class="btn btn-primary" style="margin-top: 20px;">Download Now</a>
+                </div>
+            </main>
+        `;
+
+        const extraScript = `
+            <script>
+                const isDiscordBot = navigator.userAgent.includes('Discordbot');
+                if (!isDiscordBot) {
+                    setTimeout(() => {
+                        window.location.href = "/download/${fileRecord.id}";
+                    }, 1000);
+                }
+            </script>
+        `;
+        
+        renderPage(res, bodyContent, {
+            title: `Download ${fileRecord.originalName}`,
+            description: `File uploaded to The Vault. Size: ${formatBytes(fileRecord.size)}.`,
+            url: `${DOMAIN}/share/${fileRecord.id}`,
+            extraScript: extraScript
+        });
+    });
+});
+
+app.get('/download/:id', (req, res) => {
+    db.get('SELECT * FROM files WHERE id = ?', [req.params.id], (err, fileRecord) => {
+        if (err || !fileRecord) return res.status(404).send('File not found.');
+        res.download(path.join(UPLOAD_DIR, fileRecord.storedName), fileRecord.originalName);
+    });
+});
+
+app.get('/register', (req, res) => {
+    const flash = res.locals.flash || {};
+    const bodyContent = `<h2 class="section-header">Create Account</h2><form action="/register" method="post" class="glass-panel"><input type="text" name="username" placeholder="Username" required class="${flash.field === 'username' ? 'input-error' : ''}" value="${flash.inputValue || ''}">${flash.field === 'username' ? `<div class="error-message">${flash.message}</div>` : ''}<input type="password" name="password" placeholder="Password" required><input type="submit" class="btn btn-primary" value="Register"></form>`;
+    renderPage(res, bodyContent);
+});
+
+app.post('/register', (req, res) => {
+    const { username, password } = req.body;
+    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, row) => {
+        if (err) return res.status(500).send("Database error.");
+        if (row) {
+            req.session.flash = { type: 'error', message: 'That username is already taken.', field: 'username', inputValue: username };
+            return res.redirect('/register');
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+        db.get('SELECT COUNT(*) as count FROM users', [], (err, result) => {
+            if (err) return res.status(500).send("Database error.");
+            const role = result.count === 0 ? 'admin' : 'user';
+            db.run('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', [username, hashedPassword, role], (err) => {
+                if (err) return res.status(500).send("Could not register user.");
+                res.redirect('/login');
+            });
+        });
+    });
+});
+
+app.get('/login', (req, res) => {
+    const flash = res.locals.flash || {};
+    const bodyContent = `<h2 class="section-header">Welcome Back</h2><form action="/login" method="post" class="glass-panel"><input type="text" name="username" placeholder="Username" required class="${flash.field === 'all' ? 'input-error' : ''}" value="${flash.inputValue || ''}"><input type="password" name="password" placeholder="Password" required class="${flash.field === 'all' ? 'input-error' : ''}">${flash.field === 'all' ? `<div class="error-message">${flash.message}</div>` : ''}<input type="submit" class="btn btn-primary" value="Login"></form>`;
+    renderPage(res, bodyContent);
+});
 
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
@@ -225,13 +357,11 @@ app.post('/login', (req, res) => {
         if (err) return res.status(500).send("Database error.");
         if (user && await bcrypt.compare(password, user.password)) {
             if (user.status === 'banned') {
-                const reason = user.ban_reason || "No reason provided";
-                const bodyContent = `<main class="text-center"><div class="glass-panel" style="padding: 40px;"><h1 class="page-title" style="text-align:center; font-size: 3rem;">🚫</h1><h2 class="section-header">Account Banned</h2><p>You have been banned by an administrator.</p><p style="color: var(--text-secondary); margin-top: 20px; border-top: 1px solid var(--glass-border); padding-top: 20px;"><strong>Reason:</strong> ${reason}</p></div></main>`;
-                return renderPage(res, bodyContent, { title: 'Account Banned' });
+                const bodyContent = `<main><h2 class="section-header">Access Denied</h2><p style="text-align: center; font-size: 1.1rem;">Your account has been banned by an administrator.</p></main>`;
+                return renderPage(res, bodyContent);
             }
             const userIp = req.ip;
-            const fingerprint = generateFingerprint(req);
-            db.run('UPDATE users SET last_login_ip = ?, last_fingerprint = ? WHERE username = ?', [userIp, fingerprint, username]);
+            db.run('UPDATE users SET last_login_ip = ? WHERE username = ?', [userIp, username]);
             req.session.user = { username: user.username, role: user.role };
             res.redirect('/my-files');
         } else {
@@ -241,58 +371,107 @@ app.post('/login', (req, res) => {
     });
 });
 
-app.get('/logout', (req, res) => { /* Unchanged */ });
+app.get('/logout', (req, res) => {
+    req.session.destroy(() => {
+        res.redirect('/');
+    });
+});
 
-// --- 7. Admin Routes ---
 app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
     db.all("SELECT * FROM users", [], (err, users) => {
         if (err) return res.status(500).send("Database error fetching users.");
         db.all('SELECT * FROM files', [], (err, allFiles) => {
             if (err) return res.status(500).send("Database error fetching files.");
-            const userListHtml = users.length > 0 ? '<ul>' + users.map(user => {
+            const userListHtml = users.length > 0 ? '<ul class="file-list">' + users.map(user => {
                 const isBanned = user.status === 'banned';
+                const action = isBanned ? 'unban' : 'ban';
+                const buttonClass = isBanned ? 'btn-success' : 'btn-danger';
                 let actionsHtml = '';
                 if (user.username !== req.session.user.username) {
-                    if (isBanned) {
-                        actionsHtml += `<form action="/admin/users/status" method="post" style="margin:0; background:none;"><input type="hidden" name="username" value="${user.username}"><input type="hidden" name="action" value="unban"><button type="submit" class="btn btn-success">Unban</button></form>`;
-                    } else {
-                        actionsHtml += `<button type="button" class="btn btn-danger open-ban-modal" data-username="${user.username}">Ban</button>`;
-                    }
+                    actionsHtml += `<form action="/admin/users/status" method="post" style="margin:0; padding:0; background:none;"><input type="hidden" name="username" value="${user.username}"><input type="hidden" name="action" value="${action}"><button type="submit" class="btn ${buttonClass}">${action.charAt(0).toUpperCase() + action.slice(1)}</button></form>`;
                     if (user.role !== 'admin') {
-                        actionsHtml += `<form ...>...</form>`; // Promote
+                        actionsHtml += `<form action="/admin/users/promote" method="post" onsubmit="return confirm('Are you sure you want to promote ${user.username} to an admin?');" style="margin:0; padding:0; background:none;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-secondary">Promote</button></form>`;
                     }
-                    actionsHtml += `<form ...>...</form>`; // Delete
+                    actionsHtml += `<form action="/admin/users/delete" method="post" onsubmit="return confirm('Are you sure you want to permanently delete user ${user.username} and all their files? This cannot be undone.');" style="margin:0; padding:0; background:none;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-danger">Delete</button></form>`;
                 } else {
-                    actionsHtml = '<span>(This is you)</span>';
+                    actionsHtml = '<span style="color: var(--text-secondary);">(This is you)</span>';
                 }
-                return `<li class="file-item glass-panel">...<div class="file-actions">${actionsHtml}</div></li>`;
-            }).join('') + '</ul>' : '<p>No users to manage.</p>';
-            const fileListHtml = `...`;
-            const bodyContent = `<main>...${userListHtml}...${fileListHtml}</main>`;
+                return `<li class="file-item glass-panel"><div class="file-details"><span class="file-name">${user.username}</span><span class="file-description">Role: <strong>${user.role}</strong> | Status: <strong>${user.status}</strong></span></div><div class="file-actions">${actionsHtml}</div></li>`;
+            }).join('') + '</ul>' : '<p style="text-align:center;">No users to manage.</p>';
+            const fileListHtml = allFiles.length > 0 ? '<ul class="file-list">' + allFiles.map(f => `<li class="file-item glass-panel"><div class="file-main-content"><div class="file-details"><span class="file-name">${f.originalName}</span><span class="file-description">Uploaded by ${f.owner}</span></div><span class="file-size">${formatBytes(f.size)}</span><div class="file-actions"><form action="/admin/files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;"><input type="hidden" name="fileId" value="${f.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></div></li>`).join('') + '</ul>' : '<p style="text-align:center;">No files to manage.</p>';
+            const bodyContent = `<main><div class="header"><h1>Admin Panel</h1></div><h2 class="section-header">Manage Users</h2>${userListHtml}<h2 class="section-header" style="margin-top: 40px;">Manage Files</h2>${fileListHtml}</main>`;
             renderPage(res, bodyContent);
         });
     });
 });
 
+app.post('/admin/files/delete', isAuthenticated, isAdmin, (req, res) => {
+    const { fileId } = req.body;
+    db.get('SELECT storedName FROM files WHERE id = ?', [fileId], (err, fileRecord) => {
+        if (err || !fileRecord) return res.status(404).send("File not found.");
+        const filePath = path.join(UPLOAD_DIR, fileRecord.storedName);
+        fs.unlink(filePath, err => {
+            if (err) return res.status(500).send("Could not delete file from disk.");
+            db.run('DELETE FROM files WHERE id = ?', [fileId], (err) => {
+                if (err) return res.status(500).send("Could not delete file record.");
+                res.redirect('/admin');
+            });
+        });
+    });
+});
+
 app.post('/admin/users/status', isAuthenticated, isAdmin, (req, res) => {
-    const { username, action, reason } = req.body;
+    const { username, action } = req.body;
     const newStatus = action === 'ban' ? 'banned' : 'active';
-    const banReason = action === 'ban' ? (reason || "No reason provided.") : null;
     if (username === req.session.user.username) { return res.redirect('/admin'); }
+    
     if (action === 'ban') {
-        db.get('SELECT last_login_ip, last_fingerprint FROM users WHERE username = ?', [username], (err, user) => {
-            if (user && user.last_login_ip) { db.run('INSERT OR IGNORE INTO banned_ips (ip) VALUES (?)', [user.last_login_ip]); }
-            if (user && user.last_fingerprint) { db.run('INSERT OR IGNORE INTO banned_fingerprints (fingerprint) VALUES (?)', [user.last_fingerprint]); }
+        db.get('SELECT last_login_ip FROM users WHERE username = ?', [username], (err, user) => {
+            if (user && user.last_login_ip) {
+                db.run('INSERT OR IGNORE INTO banned_ips (ip) VALUES (?)', [user.last_login_ip], (err) => {
+                    if (err) console.error("Failed to ban IP:", err);
+                    else console.log(`IP address ${user.last_login_ip} banned for user ${username}.`);
+                });
+            }
         });
     }
-    db.run("UPDATE users SET status = ?, ban_reason = ? WHERE username = ?", [newStatus, banReason, username], (err) => {
+    
+    db.run("UPDATE users SET status = ? WHERE username = ?", [newStatus, username], (err) => {
         if (err) return res.status(500).send("Database error updating user status.");
         res.redirect('/admin');
     });
 });
-app.post('/admin/files/delete', isAuthenticated, isAdmin, (req, res) => { /* Unchanged */ });
-app.post('/admin/users/promote', isAuthenticated, isAdmin, (req, res) => { /* Unchanged */ });
-app.post('/admin/users/delete', isAuthenticated, isAdmin, (req, res) => { /* Unchanged */ });
+
+app.post('/admin/users/promote', isAuthenticated, isAdmin, (req, res) => {
+    const { username } = req.body;
+    db.run("UPDATE users SET role = 'admin' WHERE username = ?", [username], (err) => {
+        if (err) return res.status(500).send("Database error promoting user.");
+        res.redirect('/admin');
+    });
+});
+
+app.post('/admin/users/delete', isAuthenticated, isAdmin, (req, res) => {
+    const { username } = req.body;
+    if (username === req.session.user.username) { return res.redirect('/admin'); }
+    db.all('SELECT storedName FROM files WHERE owner = ?', [username], (err, files) => {
+        if (err) return res.status(500).send("Error finding user's files.");
+        const deletionPromises = files.map(file => new Promise((resolve) => {
+            fs.unlink(path.join(UPLOAD_DIR, file.storedName), (err) => {
+                if (err) console.error(`Failed to delete ${file.storedName}:`, err);
+                resolve();
+            });
+        }));
+        Promise.all(deletionPromises).then(() => {
+            db.run('DELETE FROM files WHERE owner = ?', [username], (err) => {
+                if (err) return res.status(500).send("Error deleting user's file records.");
+                db.run('DELETE FROM users WHERE username = ?', [username], (err) => {
+                    if (err) return res.status(500).send("Error deleting user.");
+                    res.redirect('/admin');
+                });
+            });
+        });
+    });
+});
 
 // --- 8. Start Server ---
 app.listen(PORT, () => {
