@@ -189,23 +189,9 @@ function renderPage(res, bodyContent, options = {}) {
                 </div>
             </div>
             <script>
-                // Ban Modal Logic
-                const banModal = document.getElementById('ban-modal');
-                const banUsernameInput = document.getElementById('ban-username-input');
-                const cancelBanBtn = document.getElementById('cancel-ban-btn');
+                // Delegated click listener for buttons
                 document.addEventListener('click', function(event) {
-                    if (event.target.classList.contains('open-ban-modal')) {
-                        event.preventDefault();
-                        const username = event.target.dataset.username;
-                        banUsernameInput.value = username;
-                        banModal.style.display = 'flex';
-                    }
-                });
-                if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
-                if (banModal) { banModal.addEventListener('click', function(event) { if (event.target === banModal) { banModal.style.display = 'none'; } }); }
-                
-                // Copy Button Logic
-                document.addEventListener('click', function(event) {
+                    // Copy Button Logic
                     if (event.target.classList.contains('copy-button')) {
                         const input = event.target.previousElementSibling;
                         input.select();
@@ -214,13 +200,41 @@ function renderPage(res, bodyContent, options = {}) {
                         event.target.textContent = 'Copied!';
                         setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
                     }
+                    // Ban Modal Trigger Logic
+                    if (event.target.classList.contains('open-ban-modal')) {
+                        event.preventDefault();
+                        const banModal = document.getElementById('ban-modal');
+                        const banUsernameInput = document.getElementById('ban-username-input');
+                        if (banModal && banUsernameInput) {
+                            const username = event.target.dataset.username;
+                            banUsernameInput.value = username;
+                            banModal.style.display = 'flex';
+                        }
+                    }
                 });
 
+                // Ban Modal Close Logic
+                const banModal = document.getElementById('ban-modal');
+                if (banModal) {
+                    const cancelBanBtn = document.getElementById('cancel-ban-btn');
+                    if (cancelBanBtn) {
+                        cancelBanBtn.addEventListener('click', () => {
+                            banModal.style.display = 'none';
+                        });
+                    }
+                    banModal.addEventListener('click', function(event) {
+                        if (event.target === banModal) {
+                            banModal.style.display = 'none';
+                        }
+                    });
+                }
+                
                 // File Input & Progress Bar Logic
                 const uploadForm = document.getElementById('upload-form');
-                const fileInput = document.getElementById('sharedFile');
-                const fileNameDisplay = document.getElementById('file-name-display');
-                if (uploadForm && fileInput && fileNameDisplay) {
+                if (uploadForm) {
+                    const fileInput = document.getElementById('sharedFile');
+                    const fileNameDisplay = document.getElementById('file-name-display');
+                    
                     fileInput.addEventListener('change', () => {
                         if (fileInput.files.length > 0) {
                             fileNameDisplay.textContent = fileInput.files[0].name;
@@ -233,8 +247,8 @@ function renderPage(res, bodyContent, options = {}) {
 
                     uploadForm.addEventListener('submit', function(event) {
                         event.preventDefault();
-                        const progressBarContainer = document.querySelector('.progress-bar-container');
-                        const progressBar = document.querySelector('.progress-bar');
+                        const progressBarContainer = this.querySelector('.progress-bar-container');
+                        const progressBar = this.querySelector('.progress-bar');
                         const submitButton = this.querySelector('input[type="submit"]');
 
                         progressBarContainer.style.display = 'block';
@@ -333,7 +347,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
         
         const uploadForm = `
             <h2 class="section-header">Upload New File</h2>
-            <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" class="glass-panel">
+            <form id="upload-form" method="post" enctype="multipart/form-data" class="glass-panel">
                 <label for="sharedFile" class="upload-area">
                     <span class="upload-icon">☁️</span>
                     <span>Drag & drop your file here, or click to browse</span>
