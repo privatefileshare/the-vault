@@ -23,19 +23,8 @@ const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqli
 });
 
 db.serialize(() => {
-    db.run(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'active',
-            last_login_ip TEXT,
-            last_fingerprint TEXT,
-            ban_reason TEXT
-        )
-    `);
-    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER)`);
+    db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT, last_fingerprint TEXT, ban_reason TEXT)`);
+    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, embed_type TEXT NOT NULL DEFAULT 'card')`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_fingerprints (fingerprint TEXT PRIMARY KEY NOT NULL, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
 });
@@ -92,7 +81,7 @@ const upload = multer({
             cb(null, uniquePrefix + '-' + cleanFilename);
         }
     }),
-    limits: { fileSize: 100 * 1024 * 1024 }
+    limits: { fileSize: 500 * 1024 * 1024 } // 500 MB limit
 });
 
 // --- 3. Helper Functions & Middleware ---
@@ -144,9 +133,30 @@ function renderPage(res, bodyContent, options = {}) {
             .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
             form { display: flex; flex-direction: column; gap: 15px; margin: 30px 0; padding: 25px; }
             .text-center { text-align: center; }
-            input[type="text"], input[type="password"], input[type="file"] { background-color: var(--glass-bg); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+            input[type="text"], input[type="password"] { background-color: var(--glass-bg); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
             .input-error { border-color: var(--danger-color) !important; box-shadow: 0 0 10px 1px var(--danger-glow) !important; }
             .error-message { color: var(--danger-color); font-size: 0.9rem; margin-top: -5px; text-align: left; }
+            .upload-area { cursor: pointer; border: 2px dashed var(--glass-border); border-radius: 12px; padding: 40px 20px; text-align: center; transition: border-color 0.2s, background-color 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+            .upload-area:hover { border-color: var(--primary-purple); background-color: rgba(168, 85, 247, 0.1); }
+            .upload-icon { font-size: 2.5rem; }
+            #file-name-display { margin-top: 10px; color: var(--text-secondary); font-style: italic; }
+            .progress-bar-container { width: 100%; background-color: rgba(0,0,0,0.3); border-radius: 5px; overflow: hidden; height: 10px; margin-top: 15px; display: none; }
+            .progress-bar { width: 0%; height: 100%; background-color: var(--primary-purple); transition: width 0.3s ease; }
+            .share-link-container { display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid var(--glass-border); padding-top: 15px; align-items: center; }
+            .share-link-input { flex-grow: 1; background-color: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: var(--text-secondary); padding: 8px 10px; border-radius: 6px; font-family: monospace; }
+            .copy-button { background-color: rgba(255, 255, 255, 0.1); color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; } .copy-button:hover { background-color: var(--primary-purple); }
+            .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
+            .modal-content { padding: 30px; width: 90%; max-width: 500px; }
+            .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+            .embed-toggle-form { display: flex; align-items: center; gap: 10px; }
+            .toggle-label { font-size: 0.9rem; color: var(--text-secondary); }
+            .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+            .switch input { opacity: 0; width: 0; height: 0; }
+            .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 24px;}
+            .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%;}
+            input:checked + .slider { background-color: var(--primary-purple); }
+            input:checked + .slider:before { transform: translateX(20px); }
+
             @media (max-width: 768px) {
                 body { padding: 20px 10px; }
                 .page-title { font-size: 2rem; }
@@ -164,39 +174,185 @@ function renderPage(res, bodyContent, options = {}) {
                 ${bodyContent}
                 <footer><p>&copy; ${new Date().getFullYear()} The Vault. All rights reserved.</p></footer>
             </div>
+            <div id="ban-modal" class="modal-overlay">
+                <div class="modal-content glass-panel">
+                    <h3>Provide Ban Reason</h3>
+                    <form id="ban-reason-form" method="post" action="/admin/users/status" style="margin: 0; padding: 0; background: none; box-shadow: none; border-radius: 0;">
+                        <input type="text" id="ban-reason-input" name="reason" placeholder="Reason for ban (e.g., spamming)" required>
+                        <input type="hidden" id="ban-username-input" name="username">
+                        <input type="hidden" name="action" value="ban">
+                        <div class="modal-actions">
+                            <button type="button" id="cancel-ban-btn" class="btn btn-secondary">Cancel</button>
+                            <button type="submit" class="btn btn-danger">Confirm Ban</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <script>
+                // Ban Modal Logic
+                const banModal = document.getElementById('ban-modal');
+                const banUsernameInput = document.getElementById('ban-username-input');
+                const cancelBanBtn = document.getElementById('cancel-ban-btn');
+                document.addEventListener('click', function(event) {
+                    if (event.target.classList.contains('open-ban-modal')) {
+                        event.preventDefault();
+                        const username = event.target.dataset.username;
+                        banUsernameInput.value = username;
+                        banModal.style.display = 'flex';
+                    }
+                });
+                if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
+                if (banModal) { banModal.addEventListener('click', function(event) { if (event.target === banModal) { banModal.style.display = 'none'; } }); }
+                
+                // Copy Button Logic
+                document.addEventListener('click', function(event) {
+                    if (event.target.classList.contains('copy-button')) {
+                        const input = event.target.previousElementSibling;
+                        input.select();
+                        input.setSelectionRange(0, 99999);
+                        document.execCommand('copy');
+                        event.target.textContent = 'Copied!';
+                        setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
+                    }
+                });
+
+                // File Input & Progress Bar Logic
+                const uploadForm = document.getElementById('upload-form');
+                const fileInput = document.getElementById('sharedFile');
+                const fileNameDisplay = document.getElementById('file-name-display');
+                if (uploadForm && fileInput && fileNameDisplay) {
+                    fileInput.addEventListener('change', () => {
+                        if (fileInput.files.length > 0) {
+                            fileNameDisplay.textContent = fileInput.files[0].name;
+                            fileNameDisplay.style.fontStyle = 'normal';
+                        } else {
+                            fileNameDisplay.textContent = 'No file selected.';
+                            fileNameDisplay.style.fontStyle = 'italic';
+                        }
+                    });
+
+                    uploadForm.addEventListener('submit', function(event) {
+                        event.preventDefault();
+                        const progressBarContainer = document.querySelector('.progress-bar-container');
+                        const progressBar = document.querySelector('.progress-bar');
+                        const submitButton = this.querySelector('input[type="submit"]');
+
+                        progressBarContainer.style.display = 'block';
+                        submitButton.disabled = true;
+                        submitButton.value = 'Uploading...';
+
+                        const formData = new FormData(this);
+                        const xhr = new XMLHttpRequest();
+
+                        xhr.open('POST', '/upload', true);
+                        
+                        xhr.upload.addEventListener('progress', function(e) {
+                            if (e.lengthComputable) {
+                                const percentComplete = (e.loaded / e.total) * 100;
+                                progressBar.style.width = percentComplete + '%';
+                            }
+                        });
+
+                        xhr.onload = function() {
+                            if (xhr.status === 200) {
+                                window.location.href = '/my-files';
+                            } else {
+                                alert('Upload failed. Please try again.');
+                                progressBarContainer.style.display = 'none';
+                                submitButton.disabled = false;
+                                submitButton.value = 'Upload File';
+                            }
+                        };
+                        
+                        xhr.onerror = function() {
+                            alert('An error occurred during the upload. Please try again.');
+                            progressBarContainer.style.display = 'none';
+                            submitButton.disabled = false;
+                            submitButton.value = 'Upload File';
+                        };
+
+                        xhr.send(formData);
+                    });
+                }
+            </script>
         </body></html>`);
 }
 
 // --- 5. Main Routes ---
 app.get('/', (req, res) => {
     const bodyContent = `<main class="text-center"><h1 class="page-title" style="text-align:center;">The Vault</h1><p>Your personal corner of the cloud, secured and styled.</p><p style="margin-top: 40px;">${req.session.user ? '<a href="/my-files" class="btn btn-primary">Enter My Vault</a>' : '<a href="/login" class="btn btn-primary">Login to Enter</a>'}</p></main>`;
-    renderPage(res, bodyContent);
+    renderPage(res, bodyContent, { title: 'The Vault', description: 'Your personal corner of the cloud, secured and styled.', url: DOMAIN });
 });
 
 app.get('/my-files', isAuthenticated, (req, res) => {
     db.all('SELECT * FROM files WHERE owner = ? ORDER BY originalName ASC', [req.session.user.username], (err, userFiles) => {
         if (err) return res.status(500).send("Database error.");
         const fileListHtml = userFiles.length > 0 ? '<ul class="file-list">' + userFiles.map(f => {
-            return `<li class="file-item glass-panel"><div class="file-main-content"><div class="file-details"><span class="file-name">${f.originalName}</span><span class="file-description">Your private file.</span></div><span class="file-size">${formatBytes(f.size)}</span><div class="file-actions"><a href="/share/${f.id}" class="btn btn-primary">Download</a><form action="/my-files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;"><input type="hidden" name="fileId" value="${f.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></div></li>`;
+            const isImage = mime.lookup(f.originalName) && mime.lookup(f.originalName).startsWith('image/');
+            const embedToggleHtml = isImage ? `
+                <form action="/files/toggle-embed" method="post" class="embed-toggle-form">
+                    <input type="hidden" name="fileId" value="${f.id}">
+                    <label class="switch">
+                        <input type="checkbox" name="embedType" value="direct" onchange="this.form.submit()" ${f.embed_type === 'direct' ? 'checked' : ''}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Direct Embed</span>
+                </form>
+            ` : '';
+
+            return `
+                <li class="file-item">
+                    <div class="file-main-content">
+                        <div class="file-details">
+                            <span class="file-name">${f.originalName}</span>
+                            <span class="file-description">Your private file, ready to share.</span>
+                        </div>
+                        <span class="file-size">${formatBytes(f.size)}</span>
+                        <div class="file-actions">
+                             <a href="/share/${f.id}" class="btn btn-primary">Download</a>
+                             <form action="/my-files/delete" method="post" style="display:inline; margin:0; padding:0; background:none;">
+                                 <input type="hidden" name="fileId" value="${f.id}">
+                                 <button type="submit" class="btn btn-danger">Delete</button>
+                             </form>
+                        </div>
+                    </div>
+                    <div class="share-link-container">
+                        <input type="text" readonly class="share-link-input" value="${DOMAIN}/share/${f.id}">
+                        <button type="button" class="copy-button">Copy</button>
+                        ${embedToggleHtml}
+                    </div>
+                </li>`;
         }).join('') + '</ul>' : '<p style="text-align:center;">Your vault is empty. Upload a file to get started.</p>';
-        const uploadForm = `<h2 class="section-header">Upload New File</h2><form action="/upload" method="post" enctype="multipart/form-data" class="glass-panel"><input type="file" name="sharedFile" required><input type="submit" class="btn btn-primary" value="Upload"></form>`;
+        
+        const uploadForm = `
+            <h2 class="section-header">Upload New File</h2>
+            <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" class="glass-panel">
+                <label for="sharedFile" class="upload-area">
+                    <span class="upload-icon">☁️</span>
+                    <span>Drag & drop your file here, or click to browse</span>
+                    <span id="file-name-display">No file selected.</span>
+                    <input type="file" name="sharedFile" id="sharedFile" required style="display: none;">
+                </label>
+                <div class="progress-bar-container"><div class="progress-bar"></div></div>
+                <input type="submit" class="btn btn-primary" value="Upload File">
+            </form>`;
         renderPage(res, `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`);
     });
 });
 
 app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => {
-    if (!req.file) return res.status(400).send("No file uploaded.");
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
     const newFile = { id: crypto.randomBytes(16).toString('hex'), owner: req.session.user.username, originalName: req.file.originalname, storedName: req.file.filename, size: req.file.size };
-    db.run('INSERT INTO files (id, owner, originalName, storedName, size) VALUES (?, ?, ?, ?, ?)', [newFile.id, newFile.owner, newFile.originalName, newFile.storedName, newFile.size], (err) => {
-        if (err) return res.status(500).send("Could not save file information.");
-        res.redirect('/my-files');
+    db.run('INSERT INTO files (id, owner, originalName, storedName, size, embed_type) VALUES (?, ?, ?, ?, ?, ?)', [newFile.id, newFile.owner, newFile.originalName, newFile.storedName, newFile.size, 'card'], (err) => {
+        if (err) return res.status(500).json({ success: false, message: 'Could not save file information.' });
+        res.status(200).json({ success: true, message: 'File uploaded successfully.' });
     });
 });
 
 app.post('/my-files/delete', isAuthenticated, (req, res) => {
     const { fileId } = req.body;
     db.get('SELECT * FROM files WHERE id = ? AND owner = ?', [fileId, req.session.user.username], (err, fileRecord) => {
-        if (err || !fileRecord) return res.status(403).send("File not found or you don't have permission.");
+        if (err || !fileRecord) return res.status(403).send("Forbidden");
         const filePath = path.join(UPLOAD_DIR, fileRecord.storedName);
         fs.unlink(filePath, err => {
             if (err) return res.status(500).send("Could not delete file from disk.");
@@ -204,6 +360,20 @@ app.post('/my-files/delete', isAuthenticated, (req, res) => {
                 if (err) return res.status(500).send("Could not delete file record.");
                 res.redirect('/my-files');
             });
+        });
+    });
+});
+
+app.post('/files/toggle-embed', isAuthenticated, (req, res) => {
+    const { fileId, embedType } = req.body;
+    const newEmbedType = embedType === 'direct' ? 'direct' : 'card';
+    db.get('SELECT owner FROM files WHERE id = ?', [fileId], (err, file) => {
+        if (err || !file || file.owner !== req.session.user.username) {
+            return res.status(403).send("Forbidden");
+        }
+        db.run('UPDATE files SET embed_type = ? WHERE id = ?', [newEmbedType, fileId], (err) => {
+            if (err) return res.status(500).send("Database error.");
+            res.redirect('/my-files');
         });
     });
 });
@@ -216,18 +386,11 @@ app.get('/share/:id', (req, res) => {
         }
         let ogImage = `${DOMAIN}/logo.png`;
         const mimeType = mime.lookup(fileRecord.originalName);
-        if (mimeType && mimeType.startsWith('image/')) {
+        if (mimeType && mimeType.startsWith('image/') && fileRecord.embed_type === 'direct') {
             ogImage = `${DOMAIN}/download/${fileRecord.id}`;
         }
         const bodyContent = `<main class="text-center"><h1 class="page-title" style="text-align:center;">Download File</h1><div class="glass-panel" style="padding: 25px;"><p style="font-size: 1.2rem;">${fileRecord.originalName}</p><p>Size: ${formatBytes(fileRecord.size)}</p><a href="/download/${fileRecord.id}" class="btn btn-primary" style="margin-top: 20px;">Download Now</a></div></main>`;
-        const extraScript = `<script>const isDiscordBot = navigator.userAgent.includes('Discordbot'); if (!isDiscordBot) { setTimeout(() => { window.location.href = "/download/${fileRecord.id}"; }, 1000); }</script>`;
-        renderPage(res, bodyContent, {
-            title: `Download ${fileRecord.originalName}`,
-            description: `File from The Vault. Size: ${formatBytes(fileRecord.size)}.`,
-            url: `${DOMAIN}/share/${fileRecord.id}`,
-            image: ogImage,
-            extraScript: extraScript
-        });
+        renderPage(res, bodyContent, { title: `Download ${fileRecord.originalName}`, description: `File from The Vault. Size: ${formatBytes(fileRecord.size)}.`, url: `${DOMAIN}/share/${fileRecord.id}`, image: ogImage });
     });
 });
 
