@@ -195,11 +195,13 @@ function renderPage(res, bodyContent, options = {}) {
                         // Copy Button Logic
                         if (event.target.classList.contains('copy-button')) {
                             const input = event.target.previousElementSibling;
-                            input.select();
-                            input.setSelectionRange(0, 99999);
-                            document.execCommand('copy');
-                            event.target.textContent = 'Copied!';
-                            setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
+                            if (input) {
+                                input.select();
+                                input.setSelectionRange(0, 99999);
+                                document.execCommand('copy');
+                                event.target.textContent = 'Copied!';
+                                setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
+                            }
                         }
                         // Ban Modal Trigger Logic
                         if (event.target.classList.contains('open-ban-modal')) {
