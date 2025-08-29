@@ -570,13 +570,17 @@ app.post('/admin/users/delete', isAuthenticated, isAdmin, (req, res) => {
     if (username === req.session.user.username) { return res.redirect('/admin'); }
     db.all('SELECT storedName FROM files WHERE owner = ?', [username], (err, files) => {
         if (err) return res.status(500).send("Error finding user's files.");
-        const deletionPromises = files.map(file => new Promise((resolve) => {
+        const deletionPromises = files.map(file => new Promise((resolve, reject) => {
             fs.unlink(path.join(UPLOAD_DIR, file.storedName), (err) => {
-                if (err) console.error(`Failed to delete ${file.storedName}:`, err);
+                if (err) {
+                    console.error(`Failed to delete ${file.storedName}:`, err);
+                    // Don't reject, just resolve. We want to continue even if one file fails.
+                }
                 resolve();
             });
         }));
-        Promise.all(deletionPromises).then(() => {
+        Promise.all(deletionPromises)
+        .then(() => {
             db.run('DELETE FROM files WHERE owner = ?', [username], (err) => {
                 if (err) return res.status(500).send("Error deleting user's file records.");
                 db.run('DELETE FROM users WHERE username = ?', [username], (err) => {
@@ -584,6 +588,10 @@ app.post('/admin/users/delete', isAuthenticated, isAdmin, (req, res) => {
                     res.redirect('/admin');
                 });
             });
+        })
+        .catch(error => {
+            console.error("A critical error occurred during the file deletion process:", error);
+            res.status(500).send("A critical error occurred during the user deletion process.");
         });
     });
 });
