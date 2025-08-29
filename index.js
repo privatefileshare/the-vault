@@ -81,7 +81,7 @@ const upload = multer({
             cb(null, uniquePrefix + '-' + cleanFilename);
         }
     }),
-    limits: { fileSize: 500 * 1024 * 1024 } // 500 MB limit
+    limits: { fileSize: 500 * 1024 * 1024 }
 });
 
 // --- 3. Helper Functions & Middleware ---
@@ -259,6 +259,7 @@ function renderPage(res, bodyContent, options = {}) {
                             } else {
                                 alert('Upload failed. Please try again.');
                                 progressBarContainer.style.display = 'none';
+                                progressBar.style.width = '0%';
                                 submitButton.disabled = false;
                                 submitButton.value = 'Upload File';
                             }
@@ -267,6 +268,7 @@ function renderPage(res, bodyContent, options = {}) {
                         xhr.onerror = function() {
                             alert('An error occurred during the upload. Please try again.');
                             progressBarContainer.style.display = 'none';
+                            progressBar.style.width = '0%';
                             submitButton.disabled = false;
                             submitButton.value = 'Upload File';
                         };
@@ -281,12 +283,17 @@ function renderPage(res, bodyContent, options = {}) {
 // --- 5. Main Routes ---
 app.get('/', (req, res) => {
     const bodyContent = `<main class="text-center"><h1 class="page-title" style="text-align:center;">The Vault</h1><p>Your personal corner of the cloud, secured and styled.</p><p style="margin-top: 40px;">${req.session.user ? '<a href="/my-files" class="btn btn-primary">Enter My Vault</a>' : '<a href="/login" class="btn btn-primary">Login to Enter</a>'}</p></main>`;
-    renderPage(res, bodyContent, { title: 'The Vault', description: 'Your personal corner of the cloud, secured and styled.', url: DOMAIN });
+    renderPage(res, bodyContent, {
+        title: 'The Vault',
+        description: 'Your personal corner of the cloud, secured and styled.',
+        url: DOMAIN
+    });
 });
 
 app.get('/my-files', isAuthenticated, (req, res) => {
     db.all('SELECT * FROM files WHERE owner = ? ORDER BY originalName ASC', [req.session.user.username], (err, userFiles) => {
         if (err) return res.status(500).send("Database error.");
+        
         const fileListHtml = userFiles.length > 0 ? '<ul class="file-list">' + userFiles.map(f => {
             const isImage = mime.lookup(f.originalName) && mime.lookup(f.originalName).startsWith('image/');
             const embedToggleHtml = isImage ? `
@@ -340,11 +347,28 @@ app.get('/my-files', isAuthenticated, (req, res) => {
     });
 });
 
+app.post('/files/toggle-embed', isAuthenticated, (req, res) => {
+    const { fileId, embedType } = req.body;
+    const newEmbedType = embedType === 'direct' ? 'direct' : 'card';
+    db.get('SELECT owner FROM files WHERE id = ?', [fileId], (err, file) => {
+        if (err || !file || file.owner !== req.session.user.username) {
+            return res.status(403).send("Forbidden");
+        }
+        db.run('UPDATE files SET embed_type = ? WHERE id = ?', [newEmbedType, fileId], (err) => {
+            if (err) return res.status(500).send("Database error.");
+            res.redirect('/my-files');
+        });
+    });
+});
+
 app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
     const newFile = { id: crypto.randomBytes(16).toString('hex'), owner: req.session.user.username, originalName: req.file.originalname, storedName: req.file.filename, size: req.file.size };
     db.run('INSERT INTO files (id, owner, originalName, storedName, size, embed_type) VALUES (?, ?, ?, ?, ?, ?)', [newFile.id, newFile.owner, newFile.originalName, newFile.storedName, newFile.size, 'card'], (err) => {
-        if (err) return res.status(500).json({ success: false, message: 'Could not save file information.' });
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ success: false, message: 'Could not save file information.' });
+        }
         res.status(200).json({ success: true, message: 'File uploaded successfully.' });
     });
 });
@@ -360,20 +384,6 @@ app.post('/my-files/delete', isAuthenticated, (req, res) => {
                 if (err) return res.status(500).send("Could not delete file record.");
                 res.redirect('/my-files');
             });
-        });
-    });
-});
-
-app.post('/files/toggle-embed', isAuthenticated, (req, res) => {
-    const { fileId, embedType } = req.body;
-    const newEmbedType = embedType === 'direct' ? 'direct' : 'card';
-    db.get('SELECT owner FROM files WHERE id = ?', [fileId], (err, file) => {
-        if (err || !file || file.owner !== req.session.user.username) {
-            return res.status(403).send("Forbidden");
-        }
-        db.run('UPDATE files SET embed_type = ? WHERE id = ?', [newEmbedType, fileId], (err) => {
-            if (err) return res.status(500).send("Database error.");
-            res.redirect('/my-files');
         });
     });
 });
