@@ -116,12 +116,6 @@ function renderPage(res, bodyContent, options = {}) {
         <title>${options.title || 'The Vault'}</title>
         <meta name="description" content="${options.description || 'Your personal corner of the cloud, secured and styled.'}">
         <link rel="icon" type="image/png" href="/favicon.png">
-        <meta property="og:title" content="${options.title || 'The Vault'}">
-        <meta property="og:description" content="${options.description || 'Your personal corner of the cloud, secured and styled.'}">
-        <meta property="og:image" content="${options.image || `${DOMAIN}/logo.png`}">
-        <meta property="og:url" content="${options.url || DOMAIN}">
-        <meta property="og:type" content="website">
-        <meta name="theme-color" content="#a855f7">
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
             :root { --primary-purple: #a855f7; --glow-purple: rgba(168, 85, 247, 0.5); --text-primary: #e5e7eb; --text-secondary: #9ca3af; --glass-bg: rgba(255, 255, 255, 0.05); --glass-border: rgba(255, 255, 255, 0.1); --danger-color: #f43f5e; --danger-glow: rgba(244, 63, 94, 0.5); --success-color: #28a745; --success-glow: rgba(40, 167, 69, 0.5); }
@@ -151,9 +145,17 @@ function renderPage(res, bodyContent, options = {}) {
             .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
             form { display: flex; flex-direction: column; gap: 15px; margin: 30px 0; padding: 25px; }
             .text-center { text-align: center; }
-            input[type="text"], input[type="password"], input[type="file"] { background-color: var(--glass-bg); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+            input[type="text"], input[type="password"] { background-color: var(--glass-bg); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
             .input-error { border-color: var(--danger-color) !important; box-shadow: 0 0 10px 1px var(--danger-glow) !important; }
             .error-message { color: var(--danger-color); font-size: 0.9rem; margin-top: -5px; text-align: left; }
+            .share-link-container { display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid var(--glass-border); padding-top: 15px; }
+            .share-link-input { flex-grow: 1; background-color: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: var(--text-secondary); padding: 8px 10px; border-radius: 6px; font-family: monospace; }
+            .copy-button { background-color: rgba(255, 255, 255, 0.1); color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; } .copy-button:hover { background-color: var(--primary-purple); }
+            .upload-area { cursor: pointer; border: 2px dashed var(--glass-border); border-radius: 12px; padding: 40px 20px; text-align: center; transition: border-color 0.2s, background-color 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+            .upload-area:hover { border-color: var(--primary-purple); background-color: rgba(168, 85, 247, 0.1); }
+            .upload-icon { font-size: 2.5rem; }
+            #file-name-display { margin-top: 10px; color: var(--text-secondary); font-style: italic; }
+
             @media (max-width: 768px) {
                 body { padding: 20px 10px; }
                 .page-title { font-size: 2rem; }
@@ -171,6 +173,32 @@ function renderPage(res, bodyContent, options = {}) {
                 ${bodyContent}
                 <footer><p>&copy; ${new Date().getFullYear()} The Vault. All rights reserved.</p></footer>
             </div>
+            <script>
+                document.addEventListener('click', function(event) {
+                    if (event.target.classList.contains('copy-button')) {
+                        const input = event.target.previousElementSibling;
+                        input.select();
+                        input.setSelectionRange(0, 99999);
+                        document.execCommand('copy');
+                        event.target.textContent = 'Copied!';
+                        setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
+                    }
+                });
+
+                const fileInput = document.getElementById('sharedFile');
+                const fileNameDisplay = document.getElementById('file-name-display');
+                if(fileInput && fileNameDisplay) {
+                    fileInput.addEventListener('change', function() {
+                        if (this.files.length > 0) {
+                            fileNameDisplay.textContent = this.files[0].name;
+                            fileNameDisplay.style.fontStyle = 'normal';
+                        } else {
+                            fileNameDisplay.textContent = 'No file selected.';
+                            fileNameDisplay.style.fontStyle = 'italic';
+                        }
+                    });
+                }
+            </script>
         </body></html>`);
 }
 
@@ -194,7 +222,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <div class="file-main-content">
                         <div class="file-details">
                             <span class="file-name">${f.originalName}</span>
-                            <span class="file-description">Your private file.</span>
+                            <span class="file-description">Your private file, ready to share.</span>
                         </div>
                         <span class="file-size">${formatBytes(f.size)}</span>
                         <div class="file-actions">
@@ -205,10 +233,24 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                              </form>
                         </div>
                     </div>
+                    <div class="share-link-container">
+                        <input type="text" readonly class="share-link-input" value="${DOMAIN}/share/${f.id}">
+                        <button class="copy-button">Copy</button>
+                    </div>
                 </li>`;
         }).join('') + '</ul>' : '<p style="text-align:center;">Your vault is empty. Upload a file to get started.</p>';
         
-        const uploadForm = `<h2 class="section-header">Upload New File</h2><form action="/upload" method="post" enctype="multipart/form-data" class="glass-panel"><input type="file" name="sharedFile" required><input type="submit" class="btn btn-primary" value="Upload"></form>`;
+        const uploadForm = `
+            <h2 class="section-header">Upload New File</h2>
+            <form action="/upload" method="post" enctype="multipart/form-data" class="glass-panel">
+                <label for="sharedFile" class="upload-area">
+                    <span class="upload-icon">☁️</span>
+                    <span>Drag & drop your file here, or click to browse</span>
+                    <span id="file-name-display">No file selected.</span>
+                    <input type="file" name="sharedFile" id="sharedFile" required style="display: none;">
+                </label>
+                <input type="submit" class="btn btn-primary" value="Upload File">
+            </form>`;
         renderPage(res, `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`);
     });
 });
