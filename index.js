@@ -190,9 +190,7 @@ function renderPage(res, bodyContent, options = {}) {
             </div>
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    // Delegated click listener for buttons that might appear on the page
                     document.body.addEventListener('click', event => {
-                        // Copy Button Logic
                         if (event.target.classList.contains('copy-button')) {
                             const input = event.target.previousElementSibling;
                             if (input) {
@@ -203,7 +201,6 @@ function renderPage(res, bodyContent, options = {}) {
                                 setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
                             }
                         }
-                        // Ban Modal Trigger Logic
                         if (event.target.classList.contains('open-ban-modal')) {
                             event.preventDefault();
                             const banModal = document.getElementById('ban-modal');
@@ -216,7 +213,6 @@ function renderPage(res, bodyContent, options = {}) {
                         }
                     });
 
-                    // Logic for specific elements that only exist on certain pages
                     const banModal = document.getElementById('ban-modal');
                     if (banModal) {
                         const cancelBanBtn = document.getElementById('cancel-ban-btn');
@@ -570,12 +566,9 @@ app.post('/admin/users/delete', isAuthenticated, isAdmin, (req, res) => {
     if (username === req.session.user.username) { return res.redirect('/admin'); }
     db.all('SELECT storedName FROM files WHERE owner = ?', [username], (err, files) => {
         if (err) return res.status(500).send("Error finding user's files.");
-        const deletionPromises = files.map(file => new Promise((resolve, reject) => {
+        const deletionPromises = files.map(file => new Promise((resolve) => {
             fs.unlink(path.join(UPLOAD_DIR, file.storedName), (err) => {
-                if (err) {
-                    console.error(`Failed to delete ${file.storedName}:`, err);
-                    // Don't reject, just resolve. We want to continue even if one file fails.
-                }
+                if (err) console.error(`Failed to delete ${file.storedName}:`, err);
                 resolve();
             });
         }));
