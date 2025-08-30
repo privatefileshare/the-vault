@@ -148,24 +148,32 @@ function renderPage(res, bodyContent, options = {}) {
             .file-name { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .file-meta { font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
-            #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
-            #copy-confirm.show { opacity: 1; }
-            /* FIXED: Robust visually-hidden style for file input */
             .file-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
             .upload-actions { display: flex; align-items: center; gap: 15px; }
             .upload-actions .btn-secondary, .upload-actions .btn-primary { flex-shrink: 0; }
-            #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
             .share-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
             .share-details { overflow: hidden; }
             .share-filename { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .share-meta { font-size: 0.9rem; color: var(--text-secondary); margin: 0; }
+
+            /* NEW: Mobile Responsiveness */
+            @media (max-width: 768px) {
+                body { padding: 20px 10px; }
+                .glass-panel { padding: 20px; }
+                .page-title { font-size: 2rem; }
+                .section-header { font-size: 1.25rem; }
+                .navbar { flex-direction: column; gap: 15px; }
+                .file-item, .share-card { flex-direction: column; align-items: flex-start; gap: 20px; }
+                .file-actions { width: 100%; justify-content: flex-end; }
+                .upload-actions { flex-direction: column; align-items: stretch; }
+                .upload-actions .btn { width: 100%; justify-content: center; }
+            }
         </style>
         </head><body>
             ${navBar}
             <div class="container">
                 ${bodyContent}
             </div>
-            <div id="copy-confirm">Link copied to clipboard!</div>
             <div id="ban-modal" class="modal-overlay">
                 <div class="modal-content glass-panel">
                     <h3>Provide Ban Reason</h3>
@@ -200,43 +208,6 @@ function renderPage(res, bodyContent, options = {}) {
                         if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
-                    
-                    // File Input Logic
-                    const fileInput = document.getElementById('file-input');
-                    if (fileInput) {
-                        const fileNameDisplay = document.getElementById('file-name-display');
-                        fileInput.addEventListener('change', () => {
-                            fileNameDisplay.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : 'No file selected';
-                        });
-                    }
-
-                    // Copy Link Logic (NEW, MORE ROBUST APPROACH)
-                    function showCopyConfirmation() {
-                        const confirmPopup = document.getElementById('copy-confirm');
-                        confirmPopup.classList.add('show');
-                        setTimeout(() => confirmPopup.classList.remove('show'), 2000);
-                    }
-                    
-                    document.querySelectorAll('.copy-link-btn').forEach(button => {
-                        button.addEventListener('click', () => {
-                            const link = button.dataset.link;
-                             if (navigator.clipboard) {
-                                navigator.clipboard.writeText(link).then(showCopyConfirmation).catch(err => console.error('Async copy failed', err));
-                            } else { // Fallback
-                                const textArea = document.createElement('textarea');
-                                textArea.value = link;
-                                textArea.style.position = 'fixed'; 
-                                document.body.appendChild(textArea);
-                                textArea.focus();
-                                textArea.select();
-                                try {
-                                    document.execCommand('copy');
-                                    showCopyConfirmation();
-                                } catch (err) { console.error('Fallback copy failed', err); }
-                                document.body.removeChild(textArea);
-                            }
-                        });
-                    });
                 });
             </script>
         </body></html>`);
@@ -270,7 +241,6 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <div class="file-meta">Size: ${formatBytes(file.size)}</div>
                 </div>
                 <div class="file-actions">
-                    <button type="button" class="btn btn-secondary copy-link-btn" data-link="${DOMAIN}/share/${file.id}">Copy Link</button>
                     <a href="/download/${file.id}" class="btn btn-primary">Download</a>
                     <form action="/my-files/delete" method="post" style="margin:0;"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
                 </div>
@@ -282,10 +252,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload New File</h2>
                     <div class="upload-actions">
-                        <label for="file-input" class="btn btn-secondary">
-                            Browse Files...
-                        </label>
-                        <span id="file-name-display">No file selected</span>
+                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
                         <button type="submit" class="btn btn-primary">Upload File</button>
                     </div>
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
