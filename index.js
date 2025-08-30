@@ -150,10 +150,10 @@ function renderPage(res, bodyContent, options = {}) {
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
-            .file-input-hidden { display: none; }
-            /* FIXED: Styles for upload controls UI */
+            /* FIXED: Robust visually-hidden style for file input */
+            .file-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
             .upload-actions { display: flex; align-items: center; gap: 15px; }
-            .upload-actions label { flex-shrink: 0; } /* Prevent browse button from shrinking */
+            .upload-actions label { flex-shrink: 0; }
             #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
         </style>
         </head><body>
@@ -197,7 +197,7 @@ function renderPage(res, bodyContent, options = {}) {
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
                     
-                    // File Input Logic (FIXED)
+                    // File Input Logic
                     const fileInput = document.getElementById('file-input');
                     if (fileInput) {
                         const fileNameDisplay = document.getElementById('file-name-display');
@@ -210,7 +210,7 @@ function renderPage(res, bodyContent, options = {}) {
                         });
                     }
 
-                    // Copy Link Logic (FIXED & MADE MORE ROBUST)
+                    // Copy Link Logic
                     function showCopyConfirmation() {
                         const confirmPopup = document.getElementById('copy-confirm');
                         confirmPopup.classList.add('show');
@@ -225,7 +225,7 @@ function renderPage(res, bodyContent, options = {}) {
                             } else { // Fallback for non-secure contexts
                                 const textArea = document.createElement('textarea');
                                 textArea.value = link;
-                                textArea.style.position = 'fixed'; // Avoid scrolling to bottom
+                                textArea.style.position = 'fixed'; 
                                 document.body.appendChild(textArea);
                                 textArea.focus();
                                 textArea.select();
