@@ -139,12 +139,13 @@ function renderPage(res, bodyContent, options = {}) {
             .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
             .modal-content { padding: 30px; width: 90%; max-width: 500px; }
             .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-            /* --- NEW: Drop Zone Styles --- */
+            /* --- Drop Zone Styles --- */
             #drop-zone { border: 2px dashed var(--glass-border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s ease-in-out; position: relative; }
             #drop-zone.dragover { border-color: var(--primary-purple); background-color: rgba(168, 85, 247, 0.1); }
             #drop-zone p { margin: 0; font-size: 1.1rem; color: var(--text-secondary); pointer-events: none; }
             #drop-zone-icon { font-size: 2.5rem; margin-bottom: 15px; color: var(--primary-purple); pointer-events: none; }
-            #file-input { display: none; }
+            /* --- CORRECTED CSS RULE --- */
+            #file-input { opacity: 0; position: absolute; z-index: -1; width: 1px; height: 1px; }
             #file-name-display { margin-top: 15px !important; font-weight: 500; color: var(--text-primary) !important; }
         </style>
         </head><body>
@@ -189,7 +190,7 @@ function renderPage(res, bodyContent, options = {}) {
                         banModal.addEventListener('click', function(event) { if (event.target === banModal) { banModal.style.display = 'none'; } });
                     }
 
-                    // --- NEW: Drag and Drop Logic ---
+                    // --- Drag and Drop Logic ---
                     const dropZone = document.getElementById('drop-zone');
                     const fileInput = document.getElementById('file-input');
                     const fileNameDisplay = document.getElementById('file-name-display');
@@ -276,7 +277,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 </li>`).join('')}</ul>`
             : '<div class="glass-panel" style="padding: 20px; text-align: center;"><p>Your vault is empty. Upload a file below!</p></div>';
 
-        // --- NEW: Updated upload form with Drop Zone ---
+        // --- Updated upload form with Drop Zone ---
         const uploadForm = `
             <div class="glass-panel" style="margin-top: 40px;">
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
