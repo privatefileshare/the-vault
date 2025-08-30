@@ -128,7 +128,7 @@ function renderPage(res, bodyContent, options = {}) {
             .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid var(--glass-border); } .btn-secondary:hover { background-color: rgba(255, 255, 255, 0.2); }
             .btn-danger { background-color: var(--danger-color); } .btn-danger:hover { background-color: #be123c; box-shadow: 0 0 20px var(--danger-glow); }
             .btn-success { background-color: var(--success-color); } .btn-success:hover { background-color: #16a34a; box-shadow: 0 0 20px var(--success-glow); }
-            .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding: 15px 30px; }
+            .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding: 15px 30px; border-radius: 0; } /* UPDATED: Removed roundness */
             .nav-brand { font-size: 1.5rem; font-weight: bold; color: var(--text-primary); text-decoration: none; }
             .nav-links { display: flex; gap: 20px; }
             .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
@@ -142,10 +142,6 @@ function renderPage(res, bodyContent, options = {}) {
             .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
             .modal-content { padding: 30px; width: 90%; max-width: 500px; }
             .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-            #drop-zone { border: 2px dashed var(--glass-border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s ease-in-out; position: relative; }
-            #drop-zone.dragover { border-color: var(--primary-purple); background-color: rgba(168, 85, 247, 0.1); }
-            #drop-zone p { margin: 0; font-size: 1.1rem; color: var(--text-secondary); pointer-events: none; }
-            #file-input { opacity: 0; position: absolute; z-index: -1; width: 1px; height: 1px; }
             .file-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; }
             .file-item { display: flex; align-items: center; gap: 15px; background: rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 15px; border: 1px solid var(--glass-border); }
             .file-details { flex-grow: 1; overflow: hidden; }
@@ -154,6 +150,10 @@ function renderPage(res, bodyContent, options = {}) {
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
+            /* NEW: Styles for classic file upload */
+            .file-input-wrapper { display: flex; align-items: center; gap: 15px; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding-left: 15px; }
+            .file-input-hidden { display: none; }
+            #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         </style>
         </head><body>
             ${navBar}
@@ -195,35 +195,20 @@ function renderPage(res, bodyContent, options = {}) {
                         if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
-                    // Drag and Drop Logic
-                    const dropZone = document.getElementById('drop-zone');
-                    if (dropZone) {
-                        const fileInput = document.getElementById('file-input');
-                        const fileNameDisplay = dropZone.querySelector('p');
-                        const uploadButton = document.querySelector('#upload-form .btn-primary');
-                        uploadButton.style.display = 'none';
-                        dropZone.addEventListener('click', () => fileInput.click());
-                        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
-                        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-                        dropZone.addEventListener('drop', (e) => {
-                            e.preventDefault();
-                            dropZone.classList.remove('dragover');
-                            if (e.dataTransfer.files.length) {
-                                fileInput.files = e.dataTransfer.files;
-                                const changeEvent = new Event('change');
-                                fileInput.dispatchEvent(changeEvent);
-                            }
-                        });
+                    
+                    // NEW: Classic File Input Logic
+                    const fileInput = document.getElementById('file-input');
+                    if (fileInput) {
+                        const fileNameDisplay = document.getElementById('file-name-display');
                         fileInput.addEventListener('change', () => {
                             if (fileInput.files.length > 0) {
                                 fileNameDisplay.textContent = fileInput.files[0].name;
-                                uploadButton.style.display = 'inline-flex';
                             } else {
-                                fileNameDisplay.textContent = 'Drag & drop a file or click to select';
-                                uploadButton.style.display = 'none';
+                                fileNameDisplay.textContent = 'No file selected';
                             }
                         });
                     }
+
                     // Copy Link Logic
                     document.body.addEventListener('click', event => {
                         if (event.target.classList.contains('copy-link-btn')) {
@@ -274,14 +259,18 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 </div>
             </li>`).join('')}</ul>`
             : '<div class="glass-panel text-center"><p>Your vault is empty. Upload a file below!</p></div>';
-
+        
+        // UPDATED: Reverted to classic file upload form
         const uploadForm = `
             <div class="glass-panel" style="margin-top: 40px;">
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload New File</h2>
-                    <div id="drop-zone"><p>Drag & drop a file or click to select</p></div>
-                    <input type="file" name="sharedFile" id="file-input" required>
-                    <button type="submit" class="btn btn-primary" style="align-self: flex-start; margin-top: 20px;">Upload File</button>
+                    <div class="file-input-wrapper">
+                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                        <span id="file-name-display">No file selected</span>
+                    </div>
+                    <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
+                    <button type="submit" class="btn btn-primary" style="align-self: flex-start;">Upload File</button>
                 </form>
             </div>`;
 
