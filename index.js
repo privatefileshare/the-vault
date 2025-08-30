@@ -23,7 +23,6 @@ const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqli
 });
 
 db.serialize(() => {
-    // Added 'ban_reason TEXT' to the users table
     db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT, last_fingerprint TEXT, ban_reason TEXT)`);
     db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, embed_type TEXT NOT NULL DEFAULT 'card')`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
@@ -400,12 +399,12 @@ app.get('/login', (req, res) => {
     renderPage(res, bodyContent, { title: 'Login' });
 });
 
+// --- CORRECTED LOGIN ROUTE ---
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
     db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
         if (err) return res.status(500).send("Database error.");
         if (user && await bcrypt.compare(password, user.password)) {
-            // --- UPDATED: Banned user check ---
             if (user.status === 'banned') {
                 const reason = user.ban_reason || "No reason provided";
                 const bodyContent = `<main class="text-center"><div class="glass-panel" style="padding: 40px;"><h1 class="page-title" style="text-align:center; font-size: 3rem;">🚫</h1><h2 class="section-header">Account Banned</h2><p>You have been banned by an administrator.</p><p style="color: var(--text-secondary); margin-top: 20px; border-top: 1px solid var(--glass-border); padding-top: 20px;"><strong>Reason:</strong> ${reason}</p></div></main>`;
