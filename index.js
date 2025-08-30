@@ -151,10 +151,10 @@ function renderPage(res, bodyContent, options = {}) {
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
             .file-input-hidden { display: none; }
-            /* UPDATED: UI Fix for upload controls */
-            .upload-controls { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
-            .file-input-wrapper { display: flex; align-items: center; gap: 15px; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding-left: 15px; flex-grow: 1; }
-            #file-name-display { color: var(--text-secondary); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            /* FIXED: Styles for upload controls UI */
+            .upload-actions { display: flex; align-items: center; gap: 15px; }
+            .upload-actions label { flex-shrink: 0; } /* Prevent browse button from shrinking */
+            #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
         </style>
         </head><body>
             ${navBar}
@@ -272,7 +272,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <div class="file-meta">Size: ${formatBytes(file.size)}</div>
                 </div>
                 <div class="file-actions">
-                    <button class="btn btn-secondary copy-link-btn" data-link="${DOMAIN}/share/${file.id}">Copy Link</button>
+                    <button type="button" class="btn btn-secondary copy-link-btn" data-link="${DOMAIN}/share/${file.id}">Copy Link</button>
                     <a href="/download/${file.id}" class="btn btn-primary">Download</a>
                     <form action="/my-files/delete" method="post" style="margin:0;"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
                 </div>
@@ -283,11 +283,9 @@ app.get('/my-files', isAuthenticated, (req, res) => {
             <div class="glass-panel" style="margin-top: 40px;">
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload New File</h2>
-                    <div class="upload-controls">
-                        <div class="file-input-wrapper">
-                            <label for="file-input" class="btn btn-secondary">Browse Files...</label>
-                            <span id="file-name-display">No file selected</span>
-                        </div>
+                    <div class="upload-actions">
+                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                        <span id="file-name-display">No file selected</span>
                         <button type="submit" class="btn btn-primary">Upload File</button>
                     </div>
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
@@ -319,9 +317,8 @@ app.post('/my-files/delete', isAuthenticated, (req, res) => {
     });
 });
 
-// FIXED: Added 'const { id } = req.params' to solve server error
 app.get('/share/:id', (req, res) => {
-    const { id } = req.params; // This line was missing
+    const { id } = req.params; 
     db.get('SELECT * FROM files WHERE id = ?', [id], (err, file) => {
         if (err || !file) {
             const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">404</h1><h2>File Not Found</h2><p>This file may have been moved or deleted.</p></div></main>`;
