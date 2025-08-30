@@ -143,18 +143,18 @@ function renderPage(res, bodyContent, options = {}) {
             .modal-content { padding: 30px; width: 90%; max-width: 500px; }
             .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
             .file-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; }
-            .file-item { display: flex; align-items: center; gap: 15px; padding: 20px; } /* UPDATED: Simplified for glass-panel */
+            .file-item { display: flex; align-items: center; gap: 15px; padding: 20px; }
             .file-details { flex-grow: 1; overflow: hidden; }
             .file-name { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .file-meta { font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
+            /* FIXED: Robust visually-hidden style for file input */
             .file-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
             .upload-actions { display: flex; align-items: center; gap: 15px; }
-            .upload-actions label { flex-shrink: 0; }
+            .upload-actions .btn-secondary, .upload-actions .btn-primary { flex-shrink: 0; }
             #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
-            /* NEW: Styles for the share page card */
             .share-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
             .share-details { overflow: hidden; }
             .share-filename { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -201,47 +201,42 @@ function renderPage(res, bodyContent, options = {}) {
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
                     
-                    // Scripts for the My Files page - More robust implementation
-                    const myFilesPage = document.getElementById('my-files-page');
-                    if (myFilesPage) {
-                        // File Input Logic
-                        const fileInput = document.getElementById('file-input');
+                    // File Input Logic
+                    const fileInput = document.getElementById('file-input');
+                    if (fileInput) {
                         const fileNameDisplay = document.getElementById('file-name-display');
-                        if (fileInput && fileNameDisplay) {
-                            fileInput.addEventListener('change', () => {
-                                fileNameDisplay.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : 'No file selected';
-                            });
-                        }
-
-                        // Copy Link Logic (Event Delegation)
-                        function showCopyConfirmation() {
-                            const confirmPopup = document.getElementById('copy-confirm');
-                            confirmPopup.classList.add('show');
-                            setTimeout(() => confirmPopup.classList.remove('show'), 2000);
-                        }
-                        
-                        myFilesPage.addEventListener('click', (event) => {
-                            const copyBtn = event.target.closest('.copy-link-btn');
-                            if (copyBtn) {
-                                const link = copyBtn.dataset.link;
-                                if (navigator.clipboard) {
-                                    navigator.clipboard.writeText(link).then(showCopyConfirmation);
-                                } else { // Fallback
-                                    const textArea = document.createElement('textarea');
-                                    textArea.value = link;
-                                    textArea.style.position = 'fixed';
-                                    document.body.appendChild(textArea);
-                                    textArea.focus();
-                                    textArea.select();
-                                    try {
-                                        document.execCommand('copy');
-                                        showCopyConfirmation();
-                                    } catch (err) { console.error('Fallback copy failed', err); }
-                                    document.body.removeChild(textArea);
-                                }
-                            }
+                        fileInput.addEventListener('change', () => {
+                            fileNameDisplay.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : 'No file selected';
                         });
                     }
+
+                    // Copy Link Logic (NEW, MORE ROBUST APPROACH)
+                    function showCopyConfirmation() {
+                        const confirmPopup = document.getElementById('copy-confirm');
+                        confirmPopup.classList.add('show');
+                        setTimeout(() => confirmPopup.classList.remove('show'), 2000);
+                    }
+                    
+                    document.querySelectorAll('.copy-link-btn').forEach(button => {
+                        button.addEventListener('click', () => {
+                            const link = button.dataset.link;
+                             if (navigator.clipboard) {
+                                navigator.clipboard.writeText(link).then(showCopyConfirmation).catch(err => console.error('Async copy failed', err));
+                            } else { // Fallback
+                                const textArea = document.createElement('textarea');
+                                textArea.value = link;
+                                textArea.style.position = 'fixed'; 
+                                document.body.appendChild(textArea);
+                                textArea.focus();
+                                textArea.select();
+                                try {
+                                    document.execCommand('copy');
+                                    showCopyConfirmation();
+                                } catch (err) { console.error('Fallback copy failed', err); }
+                                document.body.removeChild(textArea);
+                            }
+                        });
+                    });
                 });
             </script>
         </body></html>`);
@@ -287,7 +282,9 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload New File</h2>
                     <div class="upload-actions">
-                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                        <label for="file-input" class="btn btn-secondary">
+                            Browse Files...
+                        </label>
                         <span id="file-name-display">No file selected</span>
                         <button type="submit" class="btn btn-primary">Upload File</button>
                     </div>
@@ -295,8 +292,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 </form>
             </div>`;
         
-        // Added an ID to the main element for targeted JavaScript
-        renderPage(res, `<main id="my-files-page"><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`, { title: 'My Vault' });
+        renderPage(res, `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`, { title: 'My Vault' });
     });
 });
 
@@ -337,7 +333,6 @@ app.get('/share/:id', (req, res) => {
             else if (mimeType && mimeType.startsWith('audio/')) embedContent = `<audio controls src="${fileUrl}" style="width: 100%;"></audio>`;
             else embedContent = `<p>Direct preview is not available.</p><a href="${fileUrl}" class="btn btn-primary">Download File</a>`;
         } else {
-            // UPDATED: Using new share-card layout for a cleaner UI
             embedContent = `
                 <div class="share-card">
                     <div class="share-details">
