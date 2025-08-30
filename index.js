@@ -143,18 +143,22 @@ function renderPage(res, bodyContent, options = {}) {
             .modal-content { padding: 30px; width: 90%; max-width: 500px; }
             .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
             .file-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; }
-            .file-item { display: flex; align-items: center; gap: 15px; background: rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 15px; border: 1px solid var(--glass-border); }
+            .file-item { display: flex; align-items: center; gap: 15px; padding: 20px; } /* UPDATED: Simplified for glass-panel */
             .file-details { flex-grow: 1; overflow: hidden; }
             .file-name { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .file-meta { font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
-            /* FIXED: Robust visually-hidden style for file input */
             .file-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
             .upload-actions { display: flex; align-items: center; gap: 15px; }
             .upload-actions label { flex-shrink: 0; }
             #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
+            /* NEW: Styles for the share page card */
+            .share-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+            .share-details { overflow: hidden; }
+            .share-filename { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .share-meta { font-size: 0.9rem; color: var(--text-secondary); margin: 0; }
         </style>
         </head><body>
             ${navBar}
@@ -197,48 +201,47 @@ function renderPage(res, bodyContent, options = {}) {
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
                     
-                    // File Input Logic
-                    const fileInput = document.getElementById('file-input');
-                    if (fileInput) {
+                    // Scripts for the My Files page - More robust implementation
+                    const myFilesPage = document.getElementById('my-files-page');
+                    if (myFilesPage) {
+                        // File Input Logic
+                        const fileInput = document.getElementById('file-input');
                         const fileNameDisplay = document.getElementById('file-name-display');
-                        fileInput.addEventListener('change', () => {
-                            if (fileInput.files.length > 0) {
-                                fileNameDisplay.textContent = fileInput.files[0].name;
-                            } else {
-                                fileNameDisplay.textContent = 'No file selected';
+                        if (fileInput && fileNameDisplay) {
+                            fileInput.addEventListener('change', () => {
+                                fileNameDisplay.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : 'No file selected';
+                            });
+                        }
+
+                        // Copy Link Logic (Event Delegation)
+                        function showCopyConfirmation() {
+                            const confirmPopup = document.getElementById('copy-confirm');
+                            confirmPopup.classList.add('show');
+                            setTimeout(() => confirmPopup.classList.remove('show'), 2000);
+                        }
+                        
+                        myFilesPage.addEventListener('click', (event) => {
+                            const copyBtn = event.target.closest('.copy-link-btn');
+                            if (copyBtn) {
+                                const link = copyBtn.dataset.link;
+                                if (navigator.clipboard) {
+                                    navigator.clipboard.writeText(link).then(showCopyConfirmation);
+                                } else { // Fallback
+                                    const textArea = document.createElement('textarea');
+                                    textArea.value = link;
+                                    textArea.style.position = 'fixed';
+                                    document.body.appendChild(textArea);
+                                    textArea.focus();
+                                    textArea.select();
+                                    try {
+                                        document.execCommand('copy');
+                                        showCopyConfirmation();
+                                    } catch (err) { console.error('Fallback copy failed', err); }
+                                    document.body.removeChild(textArea);
+                                }
                             }
                         });
                     }
-
-                    // Copy Link Logic
-                    function showCopyConfirmation() {
-                        const confirmPopup = document.getElementById('copy-confirm');
-                        confirmPopup.classList.add('show');
-                        setTimeout(() => confirmPopup.classList.remove('show'), 2000);
-                    }
-
-                    document.body.addEventListener('click', event => {
-                        if (event.target.classList.contains('copy-link-btn')) {
-                            const link = event.target.dataset.link;
-                            if (navigator.clipboard) {
-                                navigator.clipboard.writeText(link).then(showCopyConfirmation);
-                            } else { // Fallback for non-secure contexts
-                                const textArea = document.createElement('textarea');
-                                textArea.value = link;
-                                textArea.style.position = 'fixed'; 
-                                document.body.appendChild(textArea);
-                                textArea.focus();
-                                textArea.select();
-                                try {
-                                    document.execCommand('copy');
-                                    showCopyConfirmation();
-                                } catch (err) {
-                                    console.error('Fallback copy failed', err);
-                                }
-                                document.body.removeChild(textArea);
-                            }
-                        }
-                    });
                 });
             </script>
         </body></html>`);
@@ -266,7 +269,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
         if (err) { console.error(err); return res.status(500).send("Database error."); }
 
         const fileListHtml = userFiles.length > 0 ? `<ul class="file-list">${userFiles.map(file => `
-            <li class="file-item">
+            <li class="file-item glass-panel">
                 <div class="file-details">
                     <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${file.originalName}</a>
                     <div class="file-meta">Size: ${formatBytes(file.size)}</div>
@@ -291,8 +294,9 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
                 </form>
             </div>`;
-
-        renderPage(res, `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`, { title: 'My Vault' });
+        
+        // Added an ID to the main element for targeted JavaScript
+        renderPage(res, `<main id="my-files-page"><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`, { title: 'My Vault' });
     });
 });
 
@@ -333,7 +337,15 @@ app.get('/share/:id', (req, res) => {
             else if (mimeType && mimeType.startsWith('audio/')) embedContent = `<audio controls src="${fileUrl}" style="width: 100%;"></audio>`;
             else embedContent = `<p>Direct preview is not available.</p><a href="${fileUrl}" class="btn btn-primary">Download File</a>`;
         } else {
-            embedContent = `<div class="file-item" style="background:none; border:none; padding:0;"><div class="file-details"><span class="file-name">${file.originalName}</span><span class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</span></div><div class="file-actions"><a href="${fileUrl}" class="btn btn-primary">Download</a></div></div>`;
+            // UPDATED: Using new share-card layout for a cleaner UI
+            embedContent = `
+                <div class="share-card">
+                    <div class="share-details">
+                        <p class="share-filename" title="${file.originalName}">${file.originalName}</p>
+                        <p class="share-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</p>
+                    </div>
+                    <a href="${fileUrl}" class="btn btn-primary">Download</a>
+                </div>`;
         }
         const body = `<main class="centered-container"><div class="glass-panel" style="width:100%; max-width:600px;"><h2 class="section-header">Shared File</h2>${embedContent}</div></main>`;
         renderPage(res, body, { title: `Share - ${file.originalName}`, hideNav: true });
@@ -453,7 +465,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                 } else {
                     actionsHtml = '<span style="color:var(--text-secondary)">(This is you)</span>';
                 }
-                return `<li class="file-item">
+                return `<li class="file-item glass-panel">
                             <div class="file-details">
                                 <span class="file-name">${user.username} <span style="font-weight:400; font-size:0.9rem; color:var(--${isBanned ? 'danger' : 'success'}-color);">- ${isBanned ? 'Banned' : 'Active'}</span></span>
                                 <div class="file-meta">Role: ${user.role} &bull; IP: ${user.last_login_ip || 'N/A'}</div>
@@ -463,7 +475,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
             }).join('')}</ul>` : '<p>No users to manage.</p>';
 
             const fileListHtml = allFiles.length > 0 ? `<ul class="file-list">${allFiles.map(file => `
-                <li class="file-item">
+                <li class="file-item glass-panel">
                     <div class="file-details">
                         <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${file.originalName}</a>
                         <div class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div>
