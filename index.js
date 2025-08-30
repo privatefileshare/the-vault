@@ -136,10 +136,16 @@ function renderPage(res, bodyContent, options = {}) {
             input[type="text"], input[type="password"] { background-color: var(--glass-bg); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
             .input-error { border-color: var(--danger-color) !important; box-shadow: 0 0 10px 1px var(--danger-glow) !important; }
             .error-message { color: var(--danger-color); font-size: 0.9rem; margin-top: -5px; text-align: left; }
-            /* --- MODAL STYLES --- */
             .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
             .modal-content { padding: 30px; width: 90%; max-width: 500px; }
             .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+            /* --- NEW: Drop Zone Styles --- */
+            #drop-zone { border: 2px dashed var(--glass-border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s ease-in-out; position: relative; }
+            #drop-zone.dragover { border-color: var(--primary-purple); background-color: rgba(168, 85, 247, 0.1); }
+            #drop-zone p { margin: 0; font-size: 1.1rem; color: var(--text-secondary); pointer-events: none; }
+            #drop-zone-icon { font-size: 2.5rem; margin-bottom: 15px; color: var(--primary-purple); pointer-events: none; }
+            #file-input { display: none; }
+            #file-name-display { margin-top: 15px !important; font-weight: 500; color: var(--text-primary) !important; }
         </style>
         </head><body>
             <div class="container">
@@ -179,15 +185,53 @@ function renderPage(res, bodyContent, options = {}) {
                     const banModal = document.getElementById('ban-modal');
                     if (banModal) {
                         const cancelBanBtn = document.getElementById('cancel-ban-btn');
-                        if (cancelBanBtn) {
-                            cancelBanBtn.addEventListener('click', () => {
-                                banModal.style.display = 'none';
-                            });
-                        }
-                        // Close modal if clicking on the overlay
-                        banModal.addEventListener('click', function(event) {
-                            if (event.target === banModal) {
-                                banModal.style.display = 'none';
+                        if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
+                        banModal.addEventListener('click', function(event) { if (event.target === banModal) { banModal.style.display = 'none'; } });
+                    }
+
+                    // --- NEW: Drag and Drop Logic ---
+                    const dropZone = document.getElementById('drop-zone');
+                    const fileInput = document.getElementById('file-input');
+                    const fileNameDisplay = document.getElementById('file-name-display');
+                    const uploadButton = document.querySelector('#upload-form .btn-primary');
+
+                    if (dropZone && fileInput && fileNameDisplay && uploadButton) {
+                        // Initially hide the upload button
+                        uploadButton.style.display = 'none';
+
+                        // Open file browser on click
+                        dropZone.addEventListener('click', () => fileInput.click());
+
+                        // Add dragover class for visual feedback
+                        dropZone.addEventListener('dragover', (e) => {
+                            e.preventDefault();
+                            dropZone.classList.add('dragover');
+                        });
+
+                        // Remove dragover class
+                        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+                        // Handle the file drop
+                        dropZone.addEventListener('drop', (e) => {
+                            e.preventDefault();
+                            dropZone.classList.remove('dragover');
+                            const files = e.dataTransfer.files;
+                            if (files.length) {
+                                fileInput.files = files;
+                                // Manually trigger change event to update UI
+                                const changeEvent = new Event('change');
+                                fileInput.dispatchEvent(changeEvent);
+                            }
+                        });
+
+                        // Update UI when a file is selected
+                        fileInput.addEventListener('change', () => {
+                            if (fileInput.files.length > 0) {
+                                fileNameDisplay.textContent = fileInput.files[0].name;
+                                uploadButton.style.display = 'inline-flex'; // Show button
+                            } else {
+                                fileNameDisplay.textContent = 'Drag & drop a file or click to select';
+                                uploadButton.style.display = 'none'; // Hide button
                             }
                         });
                     }
@@ -232,12 +276,17 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 </li>`).join('')}</ul>`
             : '<div class="glass-panel" style="padding: 20px; text-align: center;"><p>Your vault is empty. Upload a file below!</p></div>';
 
+        // --- NEW: Updated upload form with Drop Zone ---
         const uploadForm = `
             <div class="glass-panel" style="margin-top: 40px;">
-                <form action="/upload" method="post" enctype="multipart/form-data">
+                <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload a New File</h2>
-                    <input type="file" name="sharedFile" required style="background:none; border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; width: 100%;">
-                    <button type="submit" class="btn btn-primary" style="align-self: flex-start;">Upload</button>
+                    <div id="drop-zone">
+                        <div id="drop-zone-icon">📤</div>
+                        <p id="file-name-display">Drag & drop a file or click to select</p>
+                    </div>
+                    <input type="file" name="sharedFile" id="file-input" required>
+                    <button type="submit" class="btn btn-primary" style="align-self: flex-start; margin-top: 20px;">Upload</button>
                 </form>
             </div>`;
 
@@ -399,7 +448,6 @@ app.get('/login', (req, res) => {
     renderPage(res, bodyContent, { title: 'Login' });
 });
 
-// --- CORRECTED LOGIN ROUTE ---
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
     db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
