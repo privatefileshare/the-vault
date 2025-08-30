@@ -128,7 +128,7 @@ function renderPage(res, bodyContent, options = {}) {
             .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid var(--glass-border); } .btn-secondary:hover { background-color: rgba(255, 255, 255, 0.2); }
             .btn-danger { background-color: var(--danger-color); } .btn-danger:hover { background-color: #be123c; box-shadow: 0 0 20px var(--danger-glow); }
             .btn-success { background-color: var(--success-color); } .btn-success:hover { background-color: #16a34a; box-shadow: 0 0 20px var(--success-glow); }
-            .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding: 15px 30px; border-radius: 0; } /* UPDATED: Removed roundness */
+            .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding: 15px 30px; border-radius: 0; }
             .nav-brand { font-size: 1.5rem; font-weight: bold; color: var(--text-primary); text-decoration: none; }
             .nav-links { display: flex; gap: 20px; }
             .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
@@ -150,10 +150,11 @@ function renderPage(res, bodyContent, options = {}) {
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
-            /* NEW: Styles for classic file upload */
-            .file-input-wrapper { display: flex; align-items: center; gap: 15px; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding-left: 15px; }
             .file-input-hidden { display: none; }
-            #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            /* UPDATED: UI Fix for upload controls */
+            .upload-controls { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+            .file-input-wrapper { display: flex; align-items: center; gap: 15px; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding-left: 15px; flex-grow: 1; }
+            #file-name-display { color: var(--text-secondary); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         </style>
         </head><body>
             ${navBar}
@@ -196,7 +197,7 @@ function renderPage(res, bodyContent, options = {}) {
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
                     
-                    // NEW: Classic File Input Logic
+                    // File Input Logic (FIXED)
                     const fileInput = document.getElementById('file-input');
                     if (fileInput) {
                         const fileNameDisplay = document.getElementById('file-name-display');
@@ -209,15 +210,33 @@ function renderPage(res, bodyContent, options = {}) {
                         });
                     }
 
-                    // Copy Link Logic
+                    // Copy Link Logic (FIXED & MADE MORE ROBUST)
+                    function showCopyConfirmation() {
+                        const confirmPopup = document.getElementById('copy-confirm');
+                        confirmPopup.classList.add('show');
+                        setTimeout(() => confirmPopup.classList.remove('show'), 2000);
+                    }
+
                     document.body.addEventListener('click', event => {
                         if (event.target.classList.contains('copy-link-btn')) {
                             const link = event.target.dataset.link;
-                            navigator.clipboard.writeText(link).then(() => {
-                                const confirmPopup = document.getElementById('copy-confirm');
-                                confirmPopup.classList.add('show');
-                                setTimeout(() => confirmPopup.classList.remove('show'), 2000);
-                            });
+                            if (navigator.clipboard) {
+                                navigator.clipboard.writeText(link).then(showCopyConfirmation);
+                            } else { // Fallback for non-secure contexts
+                                const textArea = document.createElement('textarea');
+                                textArea.value = link;
+                                textArea.style.position = 'fixed'; // Avoid scrolling to bottom
+                                document.body.appendChild(textArea);
+                                textArea.focus();
+                                textArea.select();
+                                try {
+                                    document.execCommand('copy');
+                                    showCopyConfirmation();
+                                } catch (err) {
+                                    console.error('Fallback copy failed', err);
+                                }
+                                document.body.removeChild(textArea);
+                            }
                         }
                     });
                 });
@@ -260,17 +279,18 @@ app.get('/my-files', isAuthenticated, (req, res) => {
             </li>`).join('')}</ul>`
             : '<div class="glass-panel text-center"><p>Your vault is empty. Upload a file below!</p></div>';
         
-        // UPDATED: Reverted to classic file upload form
         const uploadForm = `
             <div class="glass-panel" style="margin-top: 40px;">
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload New File</h2>
-                    <div class="file-input-wrapper">
-                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
-                        <span id="file-name-display">No file selected</span>
+                    <div class="upload-controls">
+                        <div class="file-input-wrapper">
+                            <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                            <span id="file-name-display">No file selected</span>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Upload File</button>
                     </div>
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
-                    <button type="submit" class="btn btn-primary" style="align-self: flex-start;">Upload File</button>
                 </form>
             </div>`;
 
@@ -299,7 +319,9 @@ app.post('/my-files/delete', isAuthenticated, (req, res) => {
     });
 });
 
+// FIXED: Added 'const { id } = req.params' to solve server error
 app.get('/share/:id', (req, res) => {
+    const { id } = req.params; // This line was missing
     db.get('SELECT * FROM files WHERE id = ?', [id], (err, file) => {
         if (err || !file) {
             const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">404</h1><h2>File Not Found</h2><p>This file may have been moved or deleted.</p></div></main>`;
@@ -322,6 +344,7 @@ app.get('/share/:id', (req, res) => {
 });
 
 app.get('/download/:id', (req, res) => {
+    const { id } = req.params;
     db.get('SELECT storedName, originalName FROM files WHERE id = ?', [id], (err, row) => {
         if (err || !row) return res.status(404).send('File not found.');
         res.download(path.join(UPLOAD_DIR, row.storedName), row.originalName);
