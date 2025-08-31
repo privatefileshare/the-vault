@@ -15,6 +15,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DOMAIN = process.env.DOMAIN || `http://localhost:${PORT}`;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'a_very_insecure_default_secret_for_development';
+const TURNSTILE_SECRET_KEY = process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
 
 // --- 1. Database Setup ---
 const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
@@ -41,7 +42,8 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`],
+            "script-src": ["'self'", "https://challenges.cloudflare.com", (req, res) => `'nonce-${res.locals.nonce}'`],
+            "frame-src": ["'self'", "https://challenges.cloudflare.com"],
         },
     },
 }));
@@ -57,7 +59,6 @@ function generateFingerprint(req) {
     return crypto.createHash('sha256').update(fingerprintString).digest('hex');
 }
 
-// --- UPDATED MIDDLEWARE with the requested ban message ---
 app.use((req, res, next) => {
     const userIp = req.ip;
     const fingerprint = generateFingerprint(req);
@@ -107,6 +108,42 @@ function formatBytes(bytes, decimals = 2) { if (!+bytes) return '0 Bytes'; const
 const isAuthenticated = (req, res, next) => { if (!req.session.user) return res.redirect('/login'); next(); };
 const isAdmin = (req, res, next) => { if (req.session.user && req.session.user.role === 'admin') return next(); res.status(403).send('<h1>403 Forbidden</h1>'); };
 
+// --- NEW: Cloudflare Turnstile Verification Middleware ---
+const verifyTurnstile = async (req, res, next) => {
+    const token = req.body['cf-turnstile-response'];
+    const ip = req.ip;
+
+    if (!token) {
+        req.session.flash = { type: 'error', message: 'CAPTCHA challenge failed. Please try again.' };
+        return res.redirect('back');
+    }
+
+    const formData = new URLSearchParams();
+    formData.append('secret', TURNSTILE_SECRET_KEY);
+    formData.append('response', token);
+    formData.append('remoteip', ip);
+
+    try {
+        const response = await fetch('https://challenges.cloudflare.com/api/turnstile/v2/siteverify', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            next(); // Verification successful, proceed to the next handler
+        } else {
+            req.session.flash = { type: 'error', message: 'CAPTCHA verification failed. Please try again.' };
+            res.redirect('back');
+        }
+    } catch (error) {
+        console.error('Turnstile verification error:', error);
+        req.session.flash = { type: 'error', message: 'An error occurred during CAPTCHA verification.' };
+        res.redirect('back');
+    }
+};
+
 // --- 4. Page Rendering ---
 function renderPage(res, bodyContent, options = {}) {
     const navBar = options.hideNav ? '' : `
@@ -124,6 +161,7 @@ function renderPage(res, bodyContent, options = {}) {
         <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${options.title || 'The Vault'}</title>
         ${options.metaTags || ''}
+        <script src="https://challenges.cloudflare.com/turnstile/v2/api.js" async defer></script>
         <link rel="icon" type="image/png" href="/favicon.png">
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
@@ -177,6 +215,7 @@ function renderPage(res, bodyContent, options = {}) {
             .share-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
+            .cf-turnstile { display: flex; justify-content: center; }
         </style>
         </head><body>
             ${navBar}
@@ -343,14 +382,17 @@ app.get('/download/:id', (req, res) => {
 // --- 6. Authentication & Settings Routes ---
 app.get('/register', (req, res) => {
     if (req.session.user) return res.redirect('/my-files');
+    const { type = '', message = '' } = res.locals.flash || {};
     const bodyContent = `
         <main class="centered-container">
             <div class="glass-panel" style="max-width: 450px; width: 100%;">
                 <form action="/register" method="post">
                     <h1 class="page-title text-center">Create Account</h1>
+                    ${message ? `<div class="flash-message ${type === 'success' ? 'flash-success' : 'flash-error'}">${message}</div>` : ''}
                     <input type="text" name="username" placeholder="Username" required>
                     <input type="password" name="password" placeholder="Password" required>
                     <input type="password" name="confirmPassword" placeholder="Confirm Password" required>
+                    <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY_HERE"></div>
                     <button type="submit" class="btn btn-primary">Register</button>
                     <p class="fine-print text-center">Have an account already? <a href="/login">Login here</a></p>
                 </form>
@@ -359,7 +401,7 @@ app.get('/register', (req, res) => {
     renderPage(res, bodyContent, { title: 'Register', hideNav: true });
 });
 
-app.post('/register', (req, res) => {
+app.post('/register', verifyTurnstile, (req, res) => {
     const { username, password, confirmPassword } = req.body;
     if (password !== confirmPassword) {
         req.session.flash = { type: 'error', message: 'Passwords do not match.' };
@@ -383,15 +425,16 @@ app.post('/register', (req, res) => {
 
 app.get('/login', (req, res) => {
     if (req.session.user) return res.redirect('/my-files');
-    const { message = '' } = res.locals.flash || {};
+    const { type = '', message = '' } = res.locals.flash || {};
     const bodyContent = `
         <main class="centered-container">
             <div class="glass-panel" style="max-width: 450px; width: 100%;">
                 <form action="/login" method="post">
                     <h1 class="page-title text-center">Welcome Back</h1>
-                     ${message ? `<p class="error-message text-center">${message}</p>` : ''}
+                    ${message ? `<div class="flash-message ${type === 'success' ? 'flash-success' : 'flash-error'}">${message}</div>` : ''}
                     <input type="text" name="username" placeholder="Username" required>
                     <input type="password" name="password" placeholder="Password" required>
+                    <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY_HERE"></div>
                     <button type="submit" class="btn btn-primary">Login</button>
                     <p class="fine-print text-center">Don't have an account? <a href="/register">Register here</a></p>
                 </form>
@@ -400,7 +443,7 @@ app.get('/login', (req, res) => {
     renderPage(res, bodyContent, { title: 'Login', hideNav: true });
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', verifyTurnstile, (req, res) => {
     const { username, password } = req.body;
     db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
         if (err) return res.status(500).send("Database error.");
@@ -416,7 +459,7 @@ app.post('/login', (req, res) => {
             req.session.user = { username: user.username, role: user.role };
             res.redirect('/my-files');
         } else {
-            req.session.flash = { message: 'Invalid username or password.' };
+            req.session.flash = { type: 'error', message: 'Invalid username or password.' };
             res.redirect('/login');
         }
     });
