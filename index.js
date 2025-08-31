@@ -31,7 +31,23 @@ db.serialize(() => {
 
 // --- 2. Security & Core Middleware ---
 app.set('trust proxy', 1);
-app.use(helmet());
+
+// Middleware to generate a nonce for each request
+app.use((req, res, next) => {
+    res.locals.nonce = crypto.randomBytes(16).toString('hex');
+    next();
+});
+
+// UPDATED: Helmet configuration to use the generated nonce
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`],
+        },
+    },
+}));
+
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-7', legacyHeaders: false }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
@@ -104,6 +120,7 @@ function renderPage(res, bodyContent, options = {}) {
     res.send(`
         <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${options.title || 'The Vault'}</title>
+        ${options.metaTags || ''}
         <link rel="icon" type="image/png" href="/favicon.png">
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
@@ -156,7 +173,9 @@ function renderPage(res, bodyContent, options = {}) {
             .share-details { overflow: hidden; }
             .share-filename { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .share-meta { font-size: 0.9rem; color: var(--text-secondary); margin: 0; }
-            
+            #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+            #copy-confirm.show { opacity: 1; }
+
             @media (max-width: 768px) {
                 body { padding: 20px 10px; }
                 .glass-panel { padding: 20px; }
@@ -174,6 +193,7 @@ function renderPage(res, bodyContent, options = {}) {
             <div class="container">
                 ${bodyContent}
             </div>
+            <div id="copy-confirm"></div>
             <div id="ban-modal" class="modal-overlay">
                 <div class="modal-content glass-panel">
                     <h3>Provide Ban Reason</h3>
@@ -188,19 +208,9 @@ function renderPage(res, bodyContent, options = {}) {
                     </form>
                 </div>
             </div>
-            <script>
-                // This function is now in the global scope to be called by onchange
-                function updateFileName(inputElement) {
-                    const fileNameDisplay = document.getElementById('file-name-display');
-                    if (fileNameDisplay && inputElement.files.length > 0) {
-                        fileNameDisplay.textContent = inputElement.files[0].name;
-                    } else if (fileNameDisplay) {
-                        fileNameDisplay.textContent = 'No file selected';
-                    }
-                }
-
+            <script nonce="${res.locals.nonce}">
                 document.addEventListener('DOMContentLoaded', () => {
-                    // Ban Modal Logic
+                    // --- Ban Modal Logic ---
                     document.body.addEventListener('click', event => {
                         if (event.target.classList.contains('open-ban-modal')) {
                             event.preventDefault();
@@ -218,6 +228,50 @@ function renderPage(res, bodyContent, options = {}) {
                         if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
+
+                    // --- File Input Logic ---
+                    const uploadForm = document.getElementById('upload-form');
+                    if (uploadForm) {
+                        const fileInput = uploadForm.querySelector('#file-input');
+                        const fileNameDisplay = uploadForm.querySelector('#file-name-display');
+                        if (fileInput && fileNameDisplay) {
+                            fileInput.addEventListener('change', function() {
+                                const fileName = this.files.length > 0 ? this.files[0].name : 'No file selected';
+                                fileNameDisplay.textContent = fileName;
+                            });
+                        }
+                    }
+
+                    // --- Copy Link Logic ---
+                    function showCopyConfirmation() {
+                        const confirmPopup = document.getElementById('copy-confirm');
+                        confirmPopup.textContent = 'Link copied to clipboard!';
+                        confirmPopup.classList.add('show');
+                        setTimeout(() => { confirmPopup.classList.remove('show'); }, 2000);
+                    }
+                    
+                    document.querySelectorAll('.copy-link-btn').forEach(button => {
+                        button.addEventListener('click', () => {
+                            const link = button.dataset.link;
+                            if (navigator.clipboard) {
+                                navigator.clipboard.writeText(link).then(showCopyConfirmation);
+                            } else {
+                                const textArea = document.createElement('textarea');
+                                textArea.value = link;
+                                textArea.style.position = 'fixed';
+                                document.body.appendChild(textArea);
+                                textArea.focus();
+                                textArea.select();
+                                try {
+                                    document.execCommand('copy');
+                                    showCopyConfirmation();
+                                } catch (err) {
+                                    console.error('Copy failed', err);
+                                }
+                                document.body.removeChild(textArea);
+                            }
+                        });
+                    });
                 });
             </script>
         </body></html>`);
@@ -251,6 +305,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <div class="file-meta">Size: ${formatBytes(file.size)}</div>
                 </div>
                 <div class="file-actions">
+                    <button type="button" class="btn btn-secondary copy-link-btn" data-link="${DOMAIN}/share/${file.id}">Copy Link</button>
                     <a href="/download/${file.id}" class="btn btn-primary">Download</a>
                     <form action="/my-files/delete" method="post" style="margin:0;"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
                 </div>
@@ -262,13 +317,11 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload New File</h2>
                     <div class="upload-actions">
-                        <label class="btn btn-secondary">
-                            Browse Files...
-                            <input type="file" name="sharedFile" class="file-input-hidden" required onchange="updateFileName(this)">
-                        </label>
+                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
                         <span id="file-name-display">No file selected</span>
                         <button type="submit" class="btn btn-primary">Upload File</button>
                     </div>
+                    <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
                 </form>
             </div>`;
         
@@ -304,10 +357,23 @@ app.get('/share/:id', (req, res) => {
             const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">404</h1><h2>File Not Found</h2><p>This file may have been moved or deleted.</p></div></main>`;
             return renderPage(res, bodyContent, { title: 'Not Found', hideNav: true });
         }
+        
         const fileUrl = `${DOMAIN}/download/${file.id}`;
+        let metaTags = `
+            <meta property="og:title" content="${file.originalName}">
+            <meta property="og:description" content="Download ${file.originalName} (${formatBytes(file.size)}), shared via The Vault.">
+            <meta property="og:site_name" content="The Vault">
+            <meta property="og:url" content="${DOMAIN}/share/${file.id}">
+            <meta name="twitter:card" content="summary_large_image">
+            <meta name="theme-color" content="#a855f7">
+        `;
+        const mimeType = mime.lookup(file.originalName);
+        if (mimeType && mimeType.startsWith('image/')) {
+            metaTags += `<meta property="og:image" content="${fileUrl}">`;
+        }
+
         let embedContent;
         if (file.embed_type === 'direct') {
-            const mimeType = mime.lookup(file.originalName);
             if (mimeType && mimeType.startsWith('image/')) embedContent = `<img src="${fileUrl}" style="max-width: 100%; border-radius: 12px;">`;
             else if (mimeType && mimeType.startsWith('video/')) embedContent = `<video controls src="${fileUrl}" style="max-width: 100%; border-radius: 12px;"></video>`;
             else if (mimeType && mimeType.startsWith('audio/')) embedContent = `<audio controls src="${fileUrl}" style="width: 100%;"></audio>`;
@@ -323,7 +389,7 @@ app.get('/share/:id', (req, res) => {
                 </div>`;
         }
         const body = `<main class="centered-container"><div class="glass-panel" style="width:100%; max-width:600px;"><h2 class="section-header">Shared File</h2>${embedContent}</div></main>`;
-        renderPage(res, body, { title: `Share - ${file.originalName}`, hideNav: true });
+        renderPage(res, body, { title: `Share - ${file.originalName}`, hideNav: true, metaTags: metaTags });
     });
 });
 
