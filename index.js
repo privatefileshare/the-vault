@@ -359,18 +359,43 @@ app.get('/share/:id', (req, res) => {
         }
         
         const fileUrl = `${DOMAIN}/download/${file.id}`;
+        // It's best practice to use HTTPS for embeds
+        const secureFileUrl = fileUrl.replace('http://', 'https://');
+
+        // --- START: MODIFIED META TAG LOGIC ---
         let metaTags = `
             <meta property="og:title" content="${file.originalName}">
             <meta property="og:description" content="Download ${file.originalName} (${formatBytes(file.size)}), shared via The Vault.">
             <meta property="og:site_name" content="The Vault">
             <meta property="og:url" content="${DOMAIN}/share/${file.id}">
-            <meta name="twitter:card" content="summary_large_image">
             <meta name="theme-color" content="#a855f7">
         `;
         const mimeType = mime.lookup(file.originalName);
+
         if (mimeType && mimeType.startsWith('image/')) {
-            metaTags += `<meta property="og:image" content="${fileUrl}">`;
+            metaTags += `
+                <meta property="og:image" content="${secureFileUrl}">
+                <meta name="twitter:card" content="summary_large_image">
+            `;
+        } else if (mimeType && mimeType.startsWith('video/')) {
+            // These are the tags Discord needs for a video embed
+            metaTags += `
+                <meta property="og:type" content="video.other">
+                <meta property="og:video" content="${secureFileUrl}">
+                <meta property="og:video:secure_url" content="${secureFileUrl}">
+                <meta property="og:video:type" content="${mimeType}">
+                <meta property="og:video:width" content="1280">
+                <meta property="og:video:height" content="720">
+                <meta name="twitter:card" content="player">
+                <meta name="twitter:player" content="${secureFileUrl}">
+            `;
+        } else {
+            // Fallback for other file types like ZIP, TXT, etc.
+            metaTags += `
+                <meta name="twitter:card" content="summary">
+            `;
         }
+        // --- END: MODIFIED META TAG LOGIC ---
 
         let embedContent;
         if (file.embed_type === 'direct') {
