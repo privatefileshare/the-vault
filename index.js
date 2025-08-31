@@ -128,7 +128,7 @@ function renderPage(res, bodyContent, options = {}) {
             .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid var(--glass-border); } .btn-secondary:hover { background-color: rgba(255, 255, 255, 0.2); }
             .btn-danger { background-color: var(--danger-color); } .btn-danger:hover { background-color: #be123c; box-shadow: 0 0 20px var(--danger-glow); }
             .btn-success { background-color: var(--success-color); } .btn-success:hover { background-color: #16a34a; box-shadow: 0 0 20px var(--success-glow); }
-            .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding: 15px 30px; border-radius: 0; }
+            .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding: 15px 30px; }
             .nav-brand { font-size: 1.5rem; font-weight: bold; color: var(--text-primary); text-decoration: none; }
             .nav-links { display: flex; gap: 20px; }
             .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
@@ -151,12 +151,12 @@ function renderPage(res, bodyContent, options = {}) {
             .file-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
             .upload-actions { display: flex; align-items: center; gap: 15px; }
             .upload-actions .btn-secondary, .upload-actions .btn-primary { flex-shrink: 0; }
+            #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
             .share-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
             .share-details { overflow: hidden; }
             .share-filename { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .share-meta { font-size: 0.9rem; color: var(--text-secondary); margin: 0; }
-
-            /* NEW: Mobile Responsiveness */
+            
             @media (max-width: 768px) {
                 body { padding: 20px 10px; }
                 .glass-panel { padding: 20px; }
@@ -208,6 +208,19 @@ function renderPage(res, bodyContent, options = {}) {
                         if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
+
+                    // File Input Logic (Re-added)
+                    const fileInput = document.getElementById('file-input');
+                    if (fileInput) {
+                        const fileNameDisplay = document.getElementById('file-name-display');
+                        fileInput.addEventListener('change', () => {
+                            if (fileInput.files.length > 0) {
+                                fileNameDisplay.textContent = fileInput.files[0].name;
+                            } else {
+                                fileNameDisplay.textContent = 'No file selected';
+                            }
+                        });
+                    }
                 });
             </script>
         </body></html>`);
@@ -253,6 +266,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <h2 class="section-header">Upload New File</h2>
                     <div class="upload-actions">
                         <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                        <span id="file-name-display">No file selected</span>
                         <button type="submit" class="btn btn-primary">Upload File</button>
                     </div>
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
