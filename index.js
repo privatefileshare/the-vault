@@ -37,7 +37,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// UPDATED: Helmet configuration for the new FingerprintJS CDN
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
@@ -153,6 +152,8 @@ function renderPage(res, bodyContent, options = {}) {
             .text-center { text-align: center; }
             .upload-actions { display: flex; align-items: center; gap: 15px; }
             #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
+            .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
+            .modal-content { padding: 30px; width: 90%; max-width: 500px; }
 
             @media (max-width: 768px) {
                 body { padding: 20px 10px; }
@@ -224,9 +225,11 @@ function renderPage(res, bodyContent, options = {}) {
                     const fileInput = document.getElementById('file-input');
                     if (fileInput) {
                         const fileNameDisplay = document.getElementById('file-name-display');
-                        fileInput.addEventListener('change', function() {
-                           fileNameDisplay.textContent = this.files.length > 0 ? this.files[0].name : 'No file selected';
-                        });
+                        if (fileNameDisplay) {
+                            fileInput.addEventListener('change', function() {
+                               fileNameDisplay.textContent = this.files.length > 0 ? this.files[0].name : 'No file selected';
+                            });
+                        }
                     }
 
                     const uploadForm = document.getElementById('upload-form');
