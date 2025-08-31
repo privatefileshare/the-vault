@@ -189,6 +189,16 @@ function renderPage(res, bodyContent, options = {}) {
                 </div>
             </div>
             <script>
+                // This function is now in the global scope to be called by onchange
+                function updateFileName(inputElement) {
+                    const fileNameDisplay = document.getElementById('file-name-display');
+                    if (fileNameDisplay && inputElement.files.length > 0) {
+                        fileNameDisplay.textContent = inputElement.files[0].name;
+                    } else if (fileNameDisplay) {
+                        fileNameDisplay.textContent = 'No file selected';
+                    }
+                }
+
                 document.addEventListener('DOMContentLoaded', () => {
                     // Ban Modal Logic
                     document.body.addEventListener('click', event => {
@@ -207,19 +217,6 @@ function renderPage(res, bodyContent, options = {}) {
                         const cancelBanBtn = document.getElementById('cancel-ban-btn');
                         if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
-                    }
-
-                    // File Input Logic (Re-added)
-                    const fileInput = document.getElementById('file-input');
-                    if (fileInput) {
-                        const fileNameDisplay = document.getElementById('file-name-display');
-                        fileInput.addEventListener('change', () => {
-                            if (fileInput.files.length > 0) {
-                                fileNameDisplay.textContent = fileInput.files[0].name;
-                            } else {
-                                fileNameDisplay.textContent = 'No file selected';
-                            }
-                        });
                     }
                 });
             </script>
@@ -265,11 +262,13 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload New File</h2>
                     <div class="upload-actions">
-                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                        <label class="btn btn-secondary">
+                            Browse Files...
+                            <input type="file" name="sharedFile" class="file-input-hidden" required onchange="updateFileName(this)">
+                        </label>
                         <span id="file-name-display">No file selected</span>
                         <button type="submit" class="btn btn-primary">Upload File</button>
                     </div>
-                    <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
                 </form>
             </div>`;
         
