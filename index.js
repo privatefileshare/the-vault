@@ -20,10 +20,10 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'a_very_insecure_default_se
 const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
     if (err) return console.error(err.message);
     console.log('✅ Connected to the SQLite database.');
-    loadSiteSettings(); // Load settings into memory after DB connection
+    loadSiteSettings();
 });
 
-let siteSettings = {}; // In-memory store for site settings
+let siteSettings = {};
 
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT, last_fingerprint TEXT, ban_reason TEXT)`);
@@ -43,10 +43,18 @@ function loadSiteSettings() {
             siteSettings[row.key] = row.value;
         });
 
-        if (!siteSettings.hasOwnProperty('lockdown')) {
-            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('lockdown', 'false')`, [], () => {
-                siteSettings.lockdown = 'false';
-            });
+        const defaults = {
+            lockdown: 'false',
+            announcement_text: '',
+            announcement_enabled: 'false'
+        };
+
+        for (const [key, value] of Object.entries(defaults)) {
+            if (!siteSettings.hasOwnProperty(key)) {
+                db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, [key, value], () => {
+                    siteSettings[key] = value;
+                });
+            }
         }
         console.log('✅ Site settings loaded.');
     });
@@ -110,7 +118,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// --- Lockdown Middleware ---
 const lockdownMiddleware = (req, res, next) => {
     if (siteSettings.lockdown === 'true') {
         if (req.session.user && req.session.user.role === 'admin') {
@@ -160,6 +167,12 @@ function renderPage(res, bodyContent, options = {}) {
             </div>
         </nav>`;
 
+    const announcementBar = (siteSettings.announcement_enabled === 'true' && siteSettings.announcement_text) ? `
+        <div class="announcement-bar glass-panel">
+            <p>📢 ${siteSettings.announcement_text}</p>
+        </div>
+    ` : '';
+
     res.send(`
         <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${options.title || 'The Vault'}</title>
@@ -173,6 +186,7 @@ function renderPage(res, bodyContent, options = {}) {
                 --glass-bg: rgba(31, 29, 46, 0.5); --glass-border: rgba(255, 255, 255, 0.1);
                 --danger-color: #f43f5e; --danger-glow: rgba(244, 63, 94, 0.5);
                 --success-color: #22c55e; --success-glow: rgba(34, 197, 94, 0.5);
+                --warning-color: #f59e0b;
             }
             *, *::before, *::after { box-sizing: border-box; }
             @keyframes rotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -184,18 +198,22 @@ function renderPage(res, bodyContent, options = {}) {
             .page-title { font-size: 2.5rem; font-weight: 700; background: linear-gradient(90deg, #ec4899, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0 0 30px 0; }
             .section-header { font-size: 1.5rem; font-weight: 600; margin: 0 0 20px 0; color: var(--primary-purple); border-bottom: 1px solid var(--glass-border); padding-bottom: 10px; }
             .btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; color: white; font-weight: 500; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; font-size: 1rem; }
+            .btn:disabled { background-color: #555; cursor: not-allowed; }
             .btn-primary { background-color: var(--primary-purple); } .btn-primary:hover { background-color: #9333ea; box-shadow: 0 0 20px var(--glow-purple); transform: translateY(-2px); }
             .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid var(--glass-border); } .btn-secondary:hover { background-color: rgba(255, 255, 255, 0.2); }
             .btn-danger { background-color: var(--danger-color); } .btn-danger:hover { background-color: #be123c; box-shadow: 0 0 20px var(--danger-glow); }
             .btn-success { background-color: var(--success-color); } .btn-success:hover { background-color: #16a34a; box-shadow: 0 0 20px var(--success-glow); }
-            .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding: 15px 30px; }
+            .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px 30px; }
             .nav-brand { font-size: 1.5rem; font-weight: bold; color: var(--text-primary); text-decoration: none; }
             .nav-links { display: flex; gap: 20px; }
             .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
+            .announcement-bar { text-align: center; margin-bottom: 20px; padding: 15px; }
+            .announcement-bar p { margin: 0; font-weight: 500; }
+            textarea { background-color: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; font-family: 'Inter', sans-serif; resize: vertical; min-height: 80px; }
             form { display: flex; flex-direction: column; gap: 20px; margin: 0; padding: 0; }
             .text-center { text-align: center; }
             input[type="text"], input[type="password"] { background-color: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; }
-            input:focus { border-color: var(--primary-purple); box-shadow: 0 0 10px 1px var(--glow-purple); outline: none; }
+            input:focus, textarea:focus { border-color: var(--primary-purple); box-shadow: 0 0 10px 1px var(--glow-purple); outline: none; }
             .flash-message { padding: 15px; margin-bottom: 20px; border-radius: 8px; font-weight: 500; }
             .flash-success { background-color: rgba(34, 197, 94, 0.2); border: 1px solid var(--success-color); color: var(--success-color); }
             .flash-error { background-color: rgba(244, 63, 94, 0.2); border: 1px solid var(--danger-color); color: var(--danger-color); }
@@ -214,13 +232,29 @@ function renderPage(res, bodyContent, options = {}) {
             .file-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
             .upload-actions { display: flex; align-items: center; gap: 15px; }
             #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
+            #upload-status { font-weight: 500; min-height: 1.2em; }
+            #upload-status.success { color: var(--success-color); }
+            #upload-status.error { color: var(--danger-color); }
+            #upload-status.uploading { color: var(--warning-color); }
             .share-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
+            
+            @media (max-width: 768px) {
+                .glass-panel { padding: 20px; }
+                .page-title { font-size: 2rem; }
+                .section-header { font-size: 1.25rem; }
+                .navbar { flex-direction: column; gap: 15px; }
+                .nav-links { justify-content: center; }
+                .file-item, .share-card { flex-direction: column; align-items: stretch; gap: 20px; }
+                .file-actions { flex-wrap: wrap; justify-content: flex-end; }
+                .upload-actions { flex-direction: column; align-items: stretch; }
+            }
         </style>
         </head><body>
             <div class="container">
                 ${navBar}
+                ${announcementBar}
                 ${bodyContent}
             </div>
             <div id="copy-confirm"></div>
@@ -269,6 +303,51 @@ function renderPage(res, bodyContent, options = {}) {
                             navigator.clipboard.writeText(button.dataset.link).then(showCopyConfirmation);
                         });
                     });
+                    const uploadForm = document.getElementById('upload-form');
+                    if (uploadForm) {
+                        uploadForm.addEventListener('submit', async (event) => {
+                            event.preventDefault();
+                            
+                            const uploadBtn = document.getElementById('upload-btn');
+                            const uploadStatus = document.getElementById('upload-status');
+                            const fileInput = document.getElementById('file-input');
+
+                            if (fileInput.files.length === 0) {
+                                uploadStatus.textContent = 'Please select a file first!';
+                                uploadStatus.className = 'error';
+                                return;
+                            }
+
+                            uploadBtn.disabled = true;
+                            uploadStatus.textContent = 'Uploading...';
+                            uploadStatus.className = 'uploading';
+
+                            const formData = new FormData(uploadForm);
+                            
+                            try {
+                                const response = await fetch('/upload', {
+                                    method: 'POST',
+                                    body: formData,
+                                });
+
+                                if (response.ok) {
+                                    uploadStatus.textContent = 'Uploaded!';
+                                    uploadStatus.className = 'success';
+                                    setTimeout(() => window.location.reload(), 1000);
+                                } else {
+                                    const errorData = await response.json();
+                                    uploadStatus.textContent = `Error while uploading! ${errorData.message || ''}`;
+                                    uploadStatus.className = 'error';
+                                    uploadBtn.disabled = false;
+                                }
+                            } catch (error) {
+                                console.error('Upload failed:', error);
+                                uploadStatus.textContent = 'Error while uploading! Check console for details.';
+                                uploadStatus.className = 'error';
+                                uploadBtn.disabled = false;
+                            }
+                        });
+                    }
                 });
             </script>
         </body></html>`);
@@ -318,14 +397,15 @@ app.get('/my-files', isAuthenticated, (req, res) => {
             : '<div class="glass-panel text-center"><p>Your vault is empty. Upload a file below!</p></div>';
         const uploadForm = `
             <div class="glass-panel" style="margin-top: 40px;">
-                <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+                <form id="upload-form">
                     <h2 class="section-header">Upload New File</h2>
                     <div class="upload-actions">
                         <label for="file-input" class="btn btn-secondary">Browse Files...</label>
                         <span id="file-name-display">No file selected</span>
-                        <button type="submit" class="btn btn-primary">Upload File</button>
+                        <button type="submit" id="upload-btn" class="btn btn-primary">Upload File</button>
                     </div>
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
+                    <div class="text-center"><span id="upload-status"></span></div>
                 </form>
             </div>`;
         const body = `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`;
@@ -334,12 +414,17 @@ app.get('/my-files', isAuthenticated, (req, res) => {
 });
 
 app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => {
-    if (!req.file) return res.status(400).send("No file uploaded.");
+    if (!req.file) {
+        return res.status(400).json({ message: "No file was uploaded." });
+    }
     const id = crypto.randomBytes(4).toString('hex');
     const { originalname, filename, size } = req.file;
     db.run('INSERT INTO files (id, owner, originalName, storedName, size) VALUES (?, ?, ?, ?, ?)', [id, req.session.user.username, originalname, filename, size], (err) => {
-        if (err) { console.error(err); return res.status(500).send("Error saving file info."); }
-        res.redirect('/my-files');
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: "Error saving file info to the database." });
+        }
+        res.status(200).json({ message: "File uploaded successfully." });
     });
 });
 
@@ -588,24 +673,44 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                         <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${file.originalName}</a>
                         <div class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div>
                     </div><div class="file-actions"><form action="/admin/files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
-            ).join('');
+            }).join('');
             
             const isLockdownEnabled = siteSettings.lockdown === 'true';
             const lockdownButtonClass = isLockdownEnabled ? 'btn-success' : 'btn-danger';
             const lockdownButtonText = isLockdownEnabled ? 'Disable Lockdown' : 'Enable Lockdown';
-            const lockdownSection = `
+            
+            const isAnnouncementEnabled = siteSettings.announcement_enabled === 'true';
+            const announcementButtonClass = isAnnouncementEnabled ? 'btn-success' : 'btn-danger';
+            const announcementButtonText = isAnnouncementEnabled ? 'Disable Announcement' : 'Enable Announcement';
+
+            const controlsSection = `
                 <div class="glass-panel" style="margin-bottom: 30px;">
                     <h2 class="section-header">Site Controls</h2>
-                    <p style="color: var(--text-secondary); margin-top:0;">Website Lockdown is currently <strong>${isLockdownEnabled ? 'ENABLED' : 'DISABLED'}</strong>.</p>
-                    <form action="/admin/lockdown" method="post">
-                        <button type="submit" class="btn ${lockdownButtonClass}">${lockdownButtonText}</button>
-                    </form>
+                    <div style="display: flex; flex-direction: column; gap: 20px;">
+                        <div>
+                             <p style="color: var(--text-secondary); margin-top:0; margin-bottom: 10px;">Website Lockdown is currently <strong>${isLockdownEnabled ? 'ENABLED' : 'DISABLED'}</strong>.</p>
+                             <form action="/admin/lockdown" method="post" style="padding:0; margin:0; gap:0;">
+                                <button type="submit" class="btn ${lockdownButtonClass}">${lockdownButtonText}</button>
+                            </form>
+                        </div>
+                        <hr style="border-color: var(--glass-border); width: 100%;">
+                        <div>
+                            <p style="color: var(--text-secondary); margin-top:0; margin-bottom: 10px;">Site Announcement is currently <strong>${isAnnouncementEnabled ? 'ENABLED' : 'DISABLED'}</strong>.</p>
+                            <form action="/admin/announcement" method="post" style="padding:0; margin:0; gap: 15px;">
+                                <textarea name="announcement_text" placeholder="Enter announcement message...">${siteSettings.announcement_text || ''}</textarea>
+                                <div style="display:flex; gap: 10px;">
+                                    <button type="submit" name="action" value="save_text" class="btn btn-primary">Save Announcement</button>
+                                    <button type="submit" name="action" value="toggle_status" class="btn ${announcementButtonClass}">${announcementButtonText}</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             `;
 
             const bodyContent = `<main>
                 <h1 class="page-title">Admin Panel</h1>
-                ${lockdownSection}
+                ${controlsSection}
                 <div class="glass-panel" style="margin-bottom: 30px;"><h2 class="section-header">Manage Users</h2><ul class="file-list">${userListHtml || '<p>No users found.</p>'}</ul></div>
                 <div class="glass-panel"><h2 class="section-header">Manage All Files</h2><ul class="file-list">${fileListHtml || '<p>No files found.</p>'}</ul></div></main>`;
             renderPage(res, bodyContent, { title: 'Admin Panel' });
@@ -615,8 +720,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
 
 app.post('/admin/lockdown', isAuthenticated, isAdmin, (req, res) => {
     const isCurrentlyLocked = siteSettings.lockdown === 'true';
-    const newLockdownState = !isCurrentlyLocked;
-    const newLockdownValue = newLockdownState ? 'true' : 'false';
+    const newLockdownValue = isCurrentlyLocked ? 'false' : 'true';
 
     db.run(`UPDATE settings SET value = ? WHERE key = 'lockdown'`, [newLockdownValue], function(err) {
         if (err) {
@@ -627,6 +731,29 @@ app.post('/admin/lockdown', isAuthenticated, isAdmin, (req, res) => {
         console.log(`Website lockdown state changed to: ${siteSettings.lockdown}`);
         res.redirect('/admin');
     });
+});
+
+app.post('/admin/announcement', isAuthenticated, isAdmin, (req, res) => {
+    const { action, announcement_text } = req.body;
+
+    if (action === 'save_text') {
+        const newText = announcement_text || '';
+        db.run(`UPDATE settings SET value = ? WHERE key = 'announcement_text'`, [newText], function(err) {
+            if (err) { console.error("Failed to update announcement text:", err.message); } 
+            else { siteSettings.announcement_text = newText; }
+            res.redirect('/admin');
+        });
+    } else if (action === 'toggle_status') {
+        const isCurrentlyEnabled = siteSettings.announcement_enabled === 'true';
+        const newStatusValue = isCurrentlyEnabled ? 'false' : 'true';
+        db.run(`UPDATE settings SET value = ? WHERE key = 'announcement_enabled'`, [newStatusValue], function(err) {
+            if (err) { console.error("Failed to update announcement status:", err.message); }
+            else { siteSettings.announcement_enabled = newStatusValue; }
+            res.redirect('/admin');
+        });
+    } else {
+        res.redirect('/admin');
+    }
 });
 
 
