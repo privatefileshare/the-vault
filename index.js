@@ -110,7 +110,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// --- Lockdown Middleware (Correct Position) ---
+// --- Lockdown Middleware ---
 const lockdownMiddleware = (req, res, next) => {
     if (siteSettings.lockdown === 'true') {
         if (req.session.user && req.session.user.role === 'admin') {
@@ -120,8 +120,8 @@ const lockdownMiddleware = (req, res, next) => {
         if (allowedPaths.includes(req.path)) {
             return next();
         }
-        const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1>🚧 Site Under Maintenance</h1><p>Please check back later. Only administrators can log in at this time.</p></div></main>`;
-        return renderPage(res, bodyContent, { title: 'Maintenance', hideNav: true });
+        const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1>🔒 The Vault has been locked!</h1><p>This lock has been placed by an administrator. Please check back later.</p></div></main>`;
+        return renderPage(res, bodyContent, { title: 'Site Locked', hideNav: true });
     }
     next();
 };
@@ -219,8 +219,8 @@ function renderPage(res, bodyContent, options = {}) {
             #copy-confirm.show { opacity: 1; }
         </style>
         </head><body>
-            ${navBar}
             <div class="container">
+                ${navBar}
                 ${bodyContent}
             </div>
             <div id="copy-confirm"></div>
@@ -326,7 +326,8 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
                 </form>
             </div>`;
-        renderPage(res, `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`, { title: 'My Vault' });
+        const body = `<main>${fileListHtml}${uploadForm}</main>`;
+        renderPage(res, body, { title: 'My Vault' });
     });
 });
 
@@ -598,10 +599,11 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                 </div>
             `;
 
-            const bodyContent = `<main><h1 class="page-title">Admin Panel</h1>
+            const bodyContent = `<main>
+                <h1 class="page-title">Admin Panel</h1>
                 ${lockdownSection}
-                <div class="glass-panel" style="margin-bottom: 30px;"><h2 class="section-header">Manage Users</h2><ul class="file-list">${userListHtml}</ul></div>
-                <div class="glass-panel"><h2 class="section-header">Manage All Files</h2><ul class="file-list">${fileListHtml}</ul></div></main>`;
+                <div class="glass-panel" style="margin-bottom: 30px;"><h2 class="section-header">Manage Users</h2><ul class="file-list">${userListHtml || '<p>No users found.</p>'}</ul></div>
+                <div class="glass-panel"><h2 class="section-header">Manage All Files</h2><ul class="file-list">${fileListHtml || '<p>No files found.</p>'}</ul></div></main>`;
             renderPage(res, bodyContent, { title: 'Admin Panel' });
         });
     });
