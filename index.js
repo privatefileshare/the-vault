@@ -37,11 +37,12 @@ app.use((req, res, next) => {
     next();
 });
 
+// UPDATED: Helmet configuration for the new FingerprintJS CDN
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fpjscdn.net"],
+            "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://cdn.jsdelivr.net"],
             "style-src-elem": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fonts.googleapis.com"],
             "style-src-attr": ["'unsafe-inline'"],
             "font-src": ["'self'", "https://fonts.gstatic.com"],
@@ -185,11 +186,10 @@ function renderPage(res, bodyContent, options = {}) {
                 </div>
             </div>
             
-            <script type="module" nonce="${res.locals.nonce}">
-                // FIXED: Using dynamic import() to load the ES module correctly
+            <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js" nonce="${res.locals.nonce}"></script>
+            <script nonce="${res.locals.nonce}">
                 function getFingerprint() {
-                    return import('https://fpjscdn.net/v3/d832598319c5c709a416a4918e38a221')
-                        .then(FingerprintJS => FingerprintJS.load())
+                    return FingerprintJS.load()
                         .then(fp => fp.get())
                         .then(result => result.visitorId);
                 }
@@ -220,7 +220,7 @@ function renderPage(res, bodyContent, options = {}) {
                         banModal.querySelector('#cancel-ban-btn').addEventListener('click', () => { banModal.style.display = 'none'; });
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
-                    
+
                     const fileInput = document.getElementById('file-input');
                     if (fileInput) {
                         const fileNameDisplay = document.getElementById('file-name-display');
