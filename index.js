@@ -43,7 +43,7 @@ app.use(helmet({
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
             "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fpjscdn.net"],
-            "style-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fonts.googleapis.com"],
+            "style-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fonts.googleapis.com", "'unsafe-inline'"],
             "font-src": ["'self'", "https://fonts.gstatic.com"],
         },
     },
@@ -133,34 +133,25 @@ function renderPage(res, bodyContent, options = {}) {
             .page-title { font-size: 2.5rem; font-weight: 700; background: linear-gradient(90deg, #ec4899, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0 0 30px 0; }
             .section-header { font-size: 1.5rem; font-weight: 600; margin: 0 0 20px 0; color: var(--primary-purple); border-bottom: 1px solid var(--glass-border); padding-bottom: 10px; }
             .btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; color: white; font-weight: 500; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; font-size: 1rem; }
-            .btn-primary { background-color: var(--primary-purple); } .btn-primary:hover { background-color: #9333ea; box-shadow: 0 0 20px var(--glow-purple); transform: translateY(-2px); }
-            .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid var(--glass-border); } .btn-secondary:hover { background-color: rgba(255, 255, 255, 0.2); }
-            .btn-danger { background-color: var(--danger-color); } .btn-danger:hover { background-color: #be123c; box-shadow: 0 0 20px var(--danger-glow); }
-            .btn-success { background-color: var(--success-color); } .btn-success:hover { background-color: #16a34a; box-shadow: 0 0 20px var(--success-glow); }
             .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding: 15px 30px; }
-            .nav-brand { font-size: 1.5rem; font-weight: bold; color: var(--text-primary); text-decoration: none; }
-            .nav-links { display: flex; gap: 20px; }
-            .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
             form { display: flex; flex-direction: column; gap: 20px; margin: 0; padding: 0; }
-            .text-center { text-align: center; }
-            input[type="text"], input[type="password"] { background-color: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; }
-            input:focus { border-color: var(--primary-purple); box-shadow: 0 0 10px 1px var(--glow-purple); outline: none; }
+            input[type="text"], input[type="password"] { background-color: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; }
             .file-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; }
             .file-item { display: flex; align-items: center; gap: 15px; padding: 20px; }
             .file-details { flex-grow: 1; overflow: hidden; }
             .file-name { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); }
-            .file-meta { font-size: 0.9rem; color: var(--text-secondary); }
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             .file-input-hidden { display: none; }
-            .progress-bar-container { width: 100%; background-color: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden; height: 10px; display: none; margin-top: 10px; }
+            .progress-bar-container { width: 100%; background-color: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden; height: 10px; display: none; }
             .progress-bar { width: 0%; height: 100%; background-color: var(--primary-purple); transition: width 0.2s ease-out; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
             .flash-message { padding: 15px; margin-bottom: 20px; border-radius: 8px; text-align: center; }
             .flash-success { background-color: rgba(34, 197, 94, 0.2); border: 1px solid var(--success-color); }
             .flash-error { background-color: rgba(244, 63, 94, 0.2); border: 1px solid var(--danger-color); }
-            .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
-            .modal-content { padding: 30px; width: 90%; max-width: 500px; }
+            .text-center { text-align: center; }
+            .upload-actions { display: flex; align-items: center; gap: 15px; }
+            #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
 
             @media (max-width: 768px) {
                 body { padding: 20px 10px; }
@@ -170,6 +161,7 @@ function renderPage(res, bodyContent, options = {}) {
                 .nav-links { flex-wrap: wrap; justify-content: center; }
                 .file-item { flex-direction: column; align-items: flex-start; gap: 20px; }
                 .file-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+                .upload-actions { flex-direction: column; align-items: stretch; }
             }
         </style>
         </head><body>
@@ -193,11 +185,12 @@ function renderPage(res, bodyContent, options = {}) {
                 </div>
             </div>
             
-            <script src="https://fpjscdn.net/v3/d832598319c5c709a416a4918e38a221" nonce="${res.locals.nonce}"></script>
-            <script nonce="${res.locals.nonce}">
+            <script type="module" nonce="${res.locals.nonce}">
+                import FingerprintJS from 'https://fpjscdn.net/v3/d832598319c5c709a416a4918e38a221';
+                const fpPromise = FingerprintJS.load();
+
                 function getFingerprint() {
                     return new Promise((resolve) => {
-                         const fpPromise = FingerprintJS.load();
                          fpPromise.then(fp => fp.get()).then(result => resolve(result.visitorId));
                     });
                 }
@@ -231,6 +224,15 @@ function renderPage(res, bodyContent, options = {}) {
 
                     const uploadForm = document.getElementById('upload-form');
                     if (uploadForm) {
+                        const fileInput = uploadForm.querySelector('#file-input');
+                        const fileNameDisplay = uploadForm.querySelector('#file-name-display');
+                        
+                        if(fileInput && fileNameDisplay) {
+                            fileInput.addEventListener('change', function() {
+                               fileNameDisplay.textContent = this.files.length > 0 ? this.files[0].name : 'No file selected';
+                            });
+                        }
+
                         uploadForm.addEventListener('submit', function(e) {
                             e.preventDefault();
                             const formData = new FormData(uploadForm);
@@ -345,10 +347,13 @@ app.get('/my-files', isAuthenticated, (req, res) => {
             <div class="glass-panel" style="margin-top: 40px;">
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload New File</h2>
-                    <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                    <div class="upload-actions">
+                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                        <span id="file-name-display">No file selected</span>
+                    </div>
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
                     <div class="progress-bar-container" id="progress-bar-container"><div id="progress-bar"></div></div>
-                    <button type="submit" class="btn btn-primary" style="align-self: flex-start;">Upload File</button>
+                    <button type="submit" class="btn btn-primary" style="align-self: flex-start; margin-top: 20px;">Upload File</button>
                 </form>
             </div>`;
         
@@ -381,10 +386,13 @@ app.get('/share/:id', (req, res) => {
         }
         
         const fileUrl = `${DOMAIN}/download/${file.id}`;
-        let metaTags = `<meta property="og:title" content="${file.originalName}"><meta name="theme-color" content="#a855f7"><meta property="og:description" content="Size: ${formatBytes(file.size)}">`;
         const mimeType = mime.lookup(file.originalName);
+        let metaTags = `<meta property="og:title" content="${file.originalName}"><meta name="theme-color" content="#a855f7"><meta property="og:description" content="Size: ${formatBytes(file.size)}">`;
+        
         if (mimeType && mimeType.startsWith('image/')) {
             metaTags += `<meta property="og:image" content="${fileUrl}"><meta name="twitter:card" content="summary_large_image">`;
+        } else if (mimeType && mimeType.startsWith('video/')) {
+            metaTags += `<meta property="og:video" content="${fileUrl}"><meta property="og:video:type" content="${mimeType}">`;
         }
 
         let embedContent;
@@ -417,7 +425,7 @@ app.get('/download/:id', (req, res) => {
 app.get('/register', (req, res) => {
     if (req.session.user) return res.redirect('/my-files');
     const flash = res.locals.flash ? `<p class="flash-message flash-error">${res.locals.flash.message}</p>` : '';
-    const bodyContent = `<main class="centered-container"><div class="glass-panel" style="max-width:450px;width:100%;"><form class="fingerprint-form" action="/register" method="post"><h1 class="page-title text-center">Create Account</h1>${flash}<input type="text" name="username" placeholder="Username" required><input type="password" name="password" placeholder="Password" required><input type="password" name="confirmPassword" placeholder="Confirm Password" required><button type="submit" class="btn btn-primary">Register</button><p class="fine-print text-center" style="margin-top:20px;">Have an account already? <a href="/login">Login here</a></p></form></div></main>`;
+    const bodyContent = `<main class="centered-container"><div class="glass-panel" style="max-width:450px;width:100%;"><form class="fingerprint-form" action="/register" method="post"><h1 class="page-title text-center">Create Account</h1>${flash}<input type="text" name="username" placeholder="Username" required><input type="password" name="password" placeholder="Password" required><input type="password" name="confirmPassword" placeholder="Confirm Password" required><button type="submit" class="btn btn-primary">Register</button><p class="fine-print" style="margin-top:20px;">Have an account already? <a href="/login">Login here</a></p></form></div></main>`;
     renderPage(res, bodyContent, { title: 'Register', hideNav: true });
 });
 
@@ -545,7 +553,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                     actionsHtml += isBanned ? `<form action="/admin/users/status" method="post" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><input type="hidden" name="action" value="unban"><button type="submit" class="btn btn-success">Unban</button></form>`
                                            : `<button type="button" class="btn btn-danger open-ban-modal" data-username="${user.username}">Ban</button>`;
                     if (user.role !== 'admin') actionsHtml += `<form action="/admin/users/promote" method="post" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-secondary">Promote</button></form>`;
-                    actionsHtml += `<form action="/admin/users/delete" method="post" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-danger">Delete</button></form>`;
+                    actionsHtml += `<form action="/admin/users/delete" method="post" onsubmit="return confirm('Are you sure? This will delete the user and all their files permanently.')" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-danger">Delete</button></form>`;
                 } else {
                     actionsHtml = '<span style="color:var(--text-secondary)">(This is you)</span>';
                 }
