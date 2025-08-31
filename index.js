@@ -150,6 +150,29 @@ const upload = multer({
 
 // --- 3. Helper Functions & Middleware ---
 function formatBytes(bytes, decimals = 2) { if (!+bytes) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ["Bytes", "KB", "MB", "GB", "TB"]; const i = Math.floor(Math.log(bytes) / Math.log(k)); return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`; }
+
+// NEW: Helper function to get an emoji based on file extension
+function getFileTypeEmoji(filename) {
+    const extension = path.extname(filename).toLowerCase().substring(1);
+    const emojiMap = {
+        // Images
+        'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'webp': '🖼️', 'bmp': '🖼️',
+        // Videos
+        'mp4': '🎬', 'mov': '🎬', 'avi': '🎬', 'mkv': '🎬', 'webm': '🎬',
+        // Audio
+        'mp3': '🎵', 'wav': '🎵', 'ogg': '🎵', 'flac': '🎵',
+        // Documents
+        'pdf': '📄', 'doc': '📝', 'docx': '📝', 'txt': '🗒️',
+        // Archives
+        'zip': '📦', 'rar': '📦', '7z': '📦', 'tar': '📦', 'gz': '📦',
+        // Code
+        'html': '💻', 'css': '💻', 'js': '💻', 'json': '💻', 'py': '💻',
+        // Spreadsheets & Presentations
+        'xls': '📊', 'xlsx': '📊', 'csv': '📊', 'ppt': '📽️', 'pptx': '📽️',
+    };
+    return emojiMap[extension] || '📁'; // Default to a folder emoji
+}
+
 const isAuthenticated = (req, res, next) => { if (!req.session.user) return res.redirect('/login'); next(); };
 const isAdmin = (req, res, next) => { if (req.session.user && req.session.user.role === 'admin') return next(); res.status(403).send('<h1>403 Forbidden</h1>'); };
 
@@ -208,7 +231,7 @@ function renderPage(res, bodyContent, options = {}) {
             .nav-links { display: flex; gap: 20px; }
             .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
             .announcement-bar { text-align: center; margin-bottom: 20px; padding: 15px; }
-            .announcement-bar p { margin: 0; font-weight: 500; }
+            .announcement-bar p { margin: 0; font-weight: 500; overflow-wrap: break-word; }
             textarea { background-color: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; font-family: 'Inter', sans-serif; resize: vertical; min-height: 80px; }
             form { display: flex; flex-direction: column; gap: 20px; margin: 0; padding: 0; }
             .text-center { text-align: center; }
@@ -385,7 +408,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
         const fileListHtml = userFiles.length > 0 ? `<ul class="file-list">${userFiles.map(file => `
             <li class="file-item glass-panel">
                 <div class="file-details">
-                    <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${file.originalName}</a>
+                    <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${getFileTypeEmoji(file.originalName)} ${file.originalName}</a>
                     <div class="file-meta">Size: ${formatBytes(file.size)}</div>
                 </div>
                 <div class="file-actions">
@@ -670,7 +693,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
             const fileListHtml = allFiles.map(file => `
                 <li class="file-item glass-panel">
                     <div class="file-details">
-                        <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${file.originalName}</a>
+                        <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${getFileTypeEmoji(file.originalName)} ${file.originalName}</a>
                         <div class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div>
                     </div><div class="file-actions"><form action="/admin/files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
             ).join('');
