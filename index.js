@@ -151,26 +151,18 @@ const upload = multer({
 // --- 3. Helper Functions & Middleware ---
 function formatBytes(bytes, decimals = 2) { if (!+bytes) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ["Bytes", "KB", "MB", "GB", "TB"]; const i = Math.floor(Math.log(bytes) / Math.log(k)); return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`; }
 
-// NEW: Helper function to get an emoji based on file extension
 function getFileTypeEmoji(filename) {
     const extension = path.extname(filename).toLowerCase().substring(1);
     const emojiMap = {
-        // Images
         'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'webp': '🖼️', 'bmp': '🖼️',
-        // Videos
         'mp4': '🎬', 'mov': '🎬', 'avi': '🎬', 'mkv': '🎬', 'webm': '🎬',
-        // Audio
         'mp3': '🎵', 'wav': '🎵', 'ogg': '🎵', 'flac': '🎵',
-        // Documents
         'pdf': '📄', 'doc': '📝', 'docx': '📝', 'txt': '🗒️',
-        // Archives
         'zip': '📦', 'rar': '📦', '7z': '📦', 'tar': '📦', 'gz': '📦',
-        // Code
         'html': '💻', 'css': '💻', 'js': '💻', 'json': '💻', 'py': '💻',
-        // Spreadsheets & Presentations
         'xls': '📊', 'xlsx': '📊', 'csv': '📊', 'ppt': '📽️', 'pptx': '📽️',
     };
-    return emojiMap[extension] || '📁'; // Default to a folder emoji
+    return emojiMap[extension] || '📁';
 }
 
 const isAuthenticated = (req, res, next) => { if (!req.session.user) return res.redirect('/login'); next(); };
@@ -192,7 +184,10 @@ function renderPage(res, bodyContent, options = {}) {
 
     const announcementBar = (siteSettings.announcement_enabled === 'true' && siteSettings.announcement_text) ? `
         <div class="announcement-bar glass-panel">
-            <p>📢 ${siteSettings.announcement_text}</p>
+            <p>
+                <svg class="announcement-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                ${siteSettings.announcement_text}
+            </p>
         </div>
     ` : '';
 
@@ -231,7 +226,8 @@ function renderPage(res, bodyContent, options = {}) {
             .nav-links { display: flex; gap: 20px; }
             .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
             .announcement-bar { text-align: center; margin-bottom: 20px; padding: 15px; }
-            .announcement-bar p { margin: 0; font-weight: 500; overflow-wrap: break-word; }
+            .announcement-bar p { display: flex; align-items: center; justify-content: center; margin: 0; font-weight: 500; color: var(--primary-purple); overflow-wrap: break-word; }
+            .announcement-icon { width: 1.5em; height: 1.5em; margin-right: 10px; flex-shrink: 0; }
             textarea { background-color: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; font-family: 'Inter', sans-serif; resize: vertical; min-height: 80px; }
             form { display: flex; flex-direction: column; gap: 20px; margin: 0; padding: 0; }
             .text-center { text-align: center; }
@@ -272,6 +268,8 @@ function renderPage(res, bodyContent, options = {}) {
                 .file-item, .share-card { flex-direction: column; align-items: stretch; gap: 20px; }
                 .file-actions { flex-wrap: wrap; justify-content: flex-end; }
                 .upload-actions { flex-direction: column; align-items: stretch; }
+                .announcement-actions { flex-direction: column; align-items: stretch; }
+                .announcement-actions .btn { width: 100%; }
             }
         </style>
         </head><body>
@@ -721,7 +719,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                             <p style="color: var(--text-secondary); margin-top:0; margin-bottom: 10px;">Site Announcement is currently <strong>${isAnnouncementEnabled ? 'ENABLED' : 'DISABLED'}</strong>.</p>
                             <form action="/admin/announcement" method="post" style="padding:0; margin:0; gap: 15px;">
                                 <textarea name="announcement_text" placeholder="Enter announcement message...">${siteSettings.announcement_text || ''}</textarea>
-                                <div style="display:flex; gap: 10px;">
+                                <div class="announcement-actions">
                                     <button type="submit" name="action" value="save_text" class="btn btn-primary">Save Announcement</button>
                                     <button type="submit" name="action" value="toggle_status" class="btn ${announcementButtonClass}">${announcementButtonText}</button>
                                 </div>
