@@ -32,13 +32,11 @@ db.serialize(() => {
 // --- 2. Security & Core Middleware ---
 app.set('trust proxy', 1);
 
-// Middleware to generate a nonce for each request
 app.use((req, res, next) => {
     res.locals.nonce = crypto.randomBytes(16).toString('hex');
     next();
 });
 
-// UPDATED: Helmet configuration to use the generated nonce
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
@@ -79,7 +77,7 @@ app.use((req, res, next) => {
     });
 });
 
-app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'strict' } }));
+app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: true, cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'strict' } }));
 app.use((req, res, next) => {
     res.locals.user = req.session.user;
     if (req.session.flash) { res.locals.flash = req.session.flash; delete req.session.flash; }
@@ -113,6 +111,7 @@ function renderPage(res, bodyContent, options = {}) {
             <div class="nav-links">
                 ${res.locals.user.role === 'admin' ? '<a href="/admin" class="nav-link">Admin Panel</a>' : ''}
                 <a href="/my-files" class="nav-link">My Files</a>
+                <a href="/settings" class="nav-link">Settings</a>
                 <a href="/logout" class="nav-link">Logout</a>
             </div>
         </nav>`;
@@ -153,6 +152,9 @@ function renderPage(res, bodyContent, options = {}) {
             .text-center { text-align: center; }
             input[type="text"], input[type="password"] { background-color: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; }
             input:focus { border-color: var(--primary-purple); box-shadow: 0 0 10px 1px var(--glow-purple); outline: none; }
+            .flash-message { padding: 15px; margin-bottom: 20px; border-radius: 8px; font-weight: 500; }
+            .flash-success { background-color: rgba(34, 197, 94, 0.2); border: 1px solid var(--success-color); color: var(--success-color); }
+            .flash-error { background-color: rgba(244, 63, 94, 0.2); border: 1px solid var(--danger-color); color: var(--danger-color); }
             .error-message { color: var(--danger-color); font-size: 0.9rem; text-align: left; }
             .fine-print { margin-top: 20px; color: var(--text-secondary); font-size: 0.9rem; }
             .fine-print a { color: var(--primary-purple); text-decoration: none; } .fine-print a:hover { text-decoration: underline; }
@@ -167,26 +169,10 @@ function renderPage(res, bodyContent, options = {}) {
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             .file-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
             .upload-actions { display: flex; align-items: center; gap: 15px; }
-            .upload-actions .btn-secondary, .upload-actions .btn-primary { flex-shrink: 0; }
             #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
             .share-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-            .share-details { overflow: hidden; }
-            .share-filename { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .share-meta { font-size: 0.9rem; color: var(--text-secondary); margin: 0; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
-
-            @media (max-width: 768px) {
-                body { padding: 20px 10px; }
-                .glass-panel { padding: 20px; }
-                .page-title { font-size: 2rem; }
-                .section-header { font-size: 1.25rem; }
-                .navbar { flex-direction: column; gap: 15px; }
-                .file-item, .share-card { flex-direction: column; align-items: flex-start; gap: 20px; }
-                .file-actions { width: 100%; justify-content: flex-end; }
-                .upload-actions { flex-direction: column; align-items: stretch; }
-                .upload-actions .btn { width: 100%; justify-content: center; }
-            }
         </style>
         </head><body>
             ${navBar}
@@ -197,7 +183,7 @@ function renderPage(res, bodyContent, options = {}) {
             <div id="ban-modal" class="modal-overlay">
                 <div class="modal-content glass-panel">
                     <h3>Provide Ban Reason</h3>
-                    <form id="ban-reason-form" method="post" action="/admin/users/status" style="background:none; padding:0;">
+                    <form id="ban-reason-form" method="post" action="/admin/users/status">
                         <input type="text" id="ban-reason-input" name="reason" placeholder="Reason for ban (e.g., spamming)" required>
                         <input type="hidden" id="ban-username-input" name="username">
                         <input type="hidden" name="action" value="ban">
@@ -210,66 +196,33 @@ function renderPage(res, bodyContent, options = {}) {
             </div>
             <script nonce="${res.locals.nonce}">
                 document.addEventListener('DOMContentLoaded', () => {
-                    // --- Ban Modal Logic ---
                     document.body.addEventListener('click', event => {
                         if (event.target.classList.contains('open-ban-modal')) {
                             event.preventDefault();
-                            const banModal = document.getElementById('ban-modal');
-                            const banUsernameInput = document.getElementById('ban-username-input');
-                            if (banModal && banUsernameInput) {
-                                banUsernameInput.value = event.target.dataset.username;
-                                banModal.style.display = 'flex';
-                            }
+                            document.getElementById('ban-username-input').value = event.target.dataset.username;
+                            document.getElementById('ban-modal').style.display = 'flex';
                         }
                     });
                     const banModal = document.getElementById('ban-modal');
-                    if (banModal) {
-                        const cancelBanBtn = document.getElementById('cancel-ban-btn');
-                        if (cancelBanBtn) { cancelBanBtn.addEventListener('click', () => { banModal.style.display = 'none'; }); }
-                        banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
+                    if(banModal) {
+                        document.getElementById('cancel-ban-btn').addEventListener('click', () => banModal.style.display = 'none');
+                        banModal.addEventListener('click', (e) => { if (e.target === banModal) banModal.style.display = 'none'; });
                     }
-
-                    // --- File Input Logic ---
-                    const uploadForm = document.getElementById('upload-form');
-                    if (uploadForm) {
-                        const fileInput = uploadForm.querySelector('#file-input');
-                        const fileNameDisplay = uploadForm.querySelector('#file-name-display');
-                        if (fileInput && fileNameDisplay) {
-                            fileInput.addEventListener('change', function() {
-                                const fileName = this.files.length > 0 ? this.files[0].name : 'No file selected';
-                                fileNameDisplay.textContent = fileName;
-                            });
-                        }
+                    const fileInput = document.getElementById('file-input');
+                    if (fileInput) {
+                        fileInput.addEventListener('change', function() {
+                            document.getElementById('file-name-display').textContent = this.files.length > 0 ? this.files[0].name : 'No file selected';
+                        });
                     }
-
-                    // --- Copy Link Logic ---
                     function showCopyConfirmation() {
                         const confirmPopup = document.getElementById('copy-confirm');
                         confirmPopup.textContent = 'Link copied to clipboard!';
                         confirmPopup.classList.add('show');
                         setTimeout(() => { confirmPopup.classList.remove('show'); }, 2000);
                     }
-                    
                     document.querySelectorAll('.copy-link-btn').forEach(button => {
                         button.addEventListener('click', () => {
-                            const link = button.dataset.link;
-                            if (navigator.clipboard) {
-                                navigator.clipboard.writeText(link).then(showCopyConfirmation);
-                            } else {
-                                const textArea = document.createElement('textarea');
-                                textArea.value = link;
-                                textArea.style.position = 'fixed';
-                                document.body.appendChild(textArea);
-                                textArea.focus();
-                                textArea.select();
-                                try {
-                                    document.execCommand('copy');
-                                    showCopyConfirmation();
-                                } catch (err) {
-                                    console.error('Copy failed', err);
-                                }
-                                document.body.removeChild(textArea);
-                            }
+                            navigator.clipboard.writeText(button.dataset.link).then(showCopyConfirmation);
                         });
                     });
                 });
@@ -279,9 +232,7 @@ function renderPage(res, bodyContent, options = {}) {
 
 // --- 5. Main Routes ---
 app.get('/', (req, res) => {
-    if (req.session.user) {
-        return res.redirect('/my-files');
-    }
+    if (req.session.user) return res.redirect('/my-files');
     const bodyContent = `
         <main class="centered-container">
             <div class="glass-panel text-center" style="max-width: 500px;">
@@ -297,7 +248,6 @@ app.get('/', (req, res) => {
 app.get('/my-files', isAuthenticated, (req, res) => {
     db.all('SELECT * FROM files WHERE owner = ? ORDER BY originalName ASC', [req.session.user.username], (err, userFiles) => {
         if (err) { console.error(err); return res.status(500).send("Database error."); }
-
         const fileListHtml = userFiles.length > 0 ? `<ul class="file-list">${userFiles.map(file => `
             <li class="file-item glass-panel">
                 <div class="file-details">
@@ -307,11 +257,10 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 <div class="file-actions">
                     <button type="button" class="btn btn-secondary copy-link-btn" data-link="${DOMAIN}/share/${file.id}">Copy Link</button>
                     <a href="/download/${file.id}" class="btn btn-primary">Download</a>
-                    <form action="/my-files/delete" method="post" style="margin:0;"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
+                    <form action="/my-files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
                 </div>
             </li>`).join('')}</ul>`
             : '<div class="glass-panel text-center"><p>Your vault is empty. Upload a file below!</p></div>';
-        
         const uploadForm = `
             <div class="glass-panel" style="margin-top: 40px;">
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
@@ -324,7 +273,6 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
                 </form>
             </div>`;
-        
         renderPage(res, `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`, { title: 'My Vault' });
     });
 });
@@ -351,18 +299,14 @@ app.post('/my-files/delete', isAuthenticated, (req, res) => {
 });
 
 app.get('/share/:id', (req, res) => {
-    const { id } = req.params; 
+    const { id } = req.params;
     db.get('SELECT * FROM files WHERE id = ?', [id], (err, file) => {
         if (err || !file) {
             const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">404</h1><h2>File Not Found</h2><p>This file may have been moved or deleted.</p></div></main>`;
             return renderPage(res, bodyContent, { title: 'Not Found', hideNav: true });
         }
-        
         const fileUrl = `${DOMAIN}/download/${file.id}`;
-        // It's best practice to use HTTPS for embeds
         const secureFileUrl = fileUrl.replace('http://', 'https://');
-
-        // --- START: MODIFIED META TAG LOGIC ---
         let metaTags = `
             <meta property="og:title" content="${file.originalName}">
             <meta property="og:description" content="Download ${file.originalName} (${formatBytes(file.size)}), shared via The Vault.">
@@ -371,48 +315,14 @@ app.get('/share/:id', (req, res) => {
             <meta name="theme-color" content="#a855f7">
         `;
         const mimeType = mime.lookup(file.originalName);
-
         if (mimeType && mimeType.startsWith('image/')) {
-            metaTags += `
-                <meta property="og:image" content="${secureFileUrl}">
-                <meta name="twitter:card" content="summary_large_image">
-            `;
+            metaTags += `<meta property="og:image" content="${secureFileUrl}"><meta name="twitter:card" content="summary_large_image">`;
         } else if (mimeType && mimeType.startsWith('video/')) {
-            // These are the tags Discord needs for a video embed
-            metaTags += `
-                <meta property="og:type" content="video.other">
-                <meta property="og:video" content="${secureFileUrl}">
-                <meta property="og:video:secure_url" content="${secureFileUrl}">
-                <meta property="og:video:type" content="${mimeType}">
-                <meta property="og:video:width" content="1280">
-                <meta property="og:video:height" content="720">
-                <meta name="twitter:card" content="player">
-                <meta name="twitter:player" content="${secureFileUrl}">
-            `;
+            metaTags += `<meta property="og:type" content="video.other"><meta property="og:video" content="${secureFileUrl}"><meta property="og:video:secure_url" content="${secureFileUrl}"><meta property="og:video:type" content="${mimeType}"><meta property="og:video:width" content="1280"><meta property="og:video:height" content="720"><meta name="twitter:card" content="player"><meta name="twitter:player" content="${secureFileUrl}">`;
         } else {
-            // Fallback for other file types like ZIP, TXT, etc.
-            metaTags += `
-                <meta name="twitter:card" content="summary">
-            `;
+            metaTags += `<meta name="twitter:card" content="summary">`;
         }
-        // --- END: MODIFIED META TAG LOGIC ---
-
-        let embedContent;
-        if (file.embed_type === 'direct') {
-            if (mimeType && mimeType.startsWith('image/')) embedContent = `<img src="${fileUrl}" style="max-width: 100%; border-radius: 12px;">`;
-            else if (mimeType && mimeType.startsWith('video/')) embedContent = `<video controls src="${fileUrl}" style="max-width: 100%; border-radius: 12px;"></video>`;
-            else if (mimeType && mimeType.startsWith('audio/')) embedContent = `<audio controls src="${fileUrl}" style="width: 100%;"></audio>`;
-            else embedContent = `<p>Direct preview is not available.</p><a href="${fileUrl}" class="btn btn-primary">Download File</a>`;
-        } else {
-            embedContent = `
-                <div class="share-card">
-                    <div class="share-details">
-                        <p class="share-filename" title="${file.originalName}">${file.originalName}</p>
-                        <p class="share-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</p>
-                    </div>
-                    <a href="${fileUrl}" class="btn btn-primary">Download</a>
-                </div>`;
-        }
+        let embedContent = `<div class="share-card"><div class="share-details"><p class="share-filename" title="${file.originalName}">${file.originalName}</p><p class="share-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</p></div><a href="${fileUrl}" class="btn btn-primary">Download</a></div>`;
         const body = `<main class="centered-container"><div class="glass-panel" style="width:100%; max-width:600px;"><h2 class="section-header">Shared File</h2>${embedContent}</div></main>`;
         renderPage(res, body, { title: `Share - ${file.originalName}`, hideNav: true, metaTags: metaTags });
     });
@@ -426,16 +336,14 @@ app.get('/download/:id', (req, res) => {
     });
 });
 
-// --- 6. Authentication Routes ---
+// --- 6. Authentication & Settings Routes ---
 app.get('/register', (req, res) => {
     if (req.session.user) return res.redirect('/my-files');
-    const { message = '' } = res.locals.flash || {};
     const bodyContent = `
         <main class="centered-container">
             <div class="glass-panel" style="max-width: 450px; width: 100%;">
                 <form action="/register" method="post">
                     <h1 class="page-title text-center">Create Account</h1>
-                    ${message ? `<p class="error-message text-center">${message}</p>` : ''}
                     <input type="text" name="username" placeholder="Username" required>
                     <input type="password" name="password" placeholder="Password" required>
                     <input type="password" name="confirmPassword" placeholder="Confirm Password" required>
@@ -450,12 +358,12 @@ app.get('/register', (req, res) => {
 app.post('/register', (req, res) => {
     const { username, password, confirmPassword } = req.body;
     if (password !== confirmPassword) {
-        req.session.flash = { message: 'Passwords do not match.' };
+        req.session.flash = { type: 'error', message: 'Passwords do not match.' };
         return res.redirect('/register');
     }
     db.get('SELECT username FROM users WHERE username = ?', [username], async (err, row) => {
         if (row) {
-            req.session.flash = { message: 'Username is already taken.' };
+            req.session.flash = { type: 'error', message: 'Username is already taken.' };
             return res.redirect('/register');
         }
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -495,7 +403,7 @@ app.post('/login', (req, res) => {
         if (user && await bcrypt.compare(password, user.password)) {
             if (user.status === 'banned') {
                 const reason = user.ban_reason || "No reason provided";
-                const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">🚫 Account Banned</h1><p>You have been banned by an administrator.</p><p style="color: var(--text-secondary); margin-top: 20px;"><strong>Reason:</strong> ${reason}</p></div></main>`;
+                const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">🚫 Account Banned</h1><p style="font-size: 1.1rem;">You have been banned by an Admin!<br><strong>Reason:</strong> ${reason}</p></div></main>`;
                 return renderPage(res, bodyContent, { title: 'Account Banned', hideNav: true });
             }
             const userIp = req.ip;
@@ -514,20 +422,97 @@ app.get('/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
 });
 
+app.get('/settings', isAuthenticated, (req, res) => {
+    const flash = res.locals.flash || {};
+    const bodyContent = `
+        <h1 class="page-title">Account Settings</h1>
+        ${flash.message ? `<div class="flash-message ${flash.type === 'success' ? 'flash-success' : 'flash-error'}">${flash.message}</div>` : ''}
+        <div class="glass-panel" style="margin-bottom: 30px;">
+            <h2 class="section-header">Change Username</h2>
+            <form action="/settings/username" method="post">
+                <input type="text" name="newUsername" placeholder="Enter new username" required>
+                <button type="submit" class="btn btn-primary">Update Username</button>
+            </form>
+        </div>
+        <div class="glass-panel">
+            <h2 class="section-header">Change Password</h2>
+            <form action="/settings/password" method="post">
+                <input type="password" name="currentPassword" placeholder="Current password" required>
+                <input type="password" name="newPassword" placeholder="New password" required>
+                <input type="password" name="confirmPassword" placeholder="Confirm new password" required>
+                <button type="submit" class="btn btn-primary">Update Password</button>
+            </form>
+        </div>
+    `;
+    renderPage(res, bodyContent, { title: 'Settings' });
+});
+
+app.post('/settings/username', isAuthenticated, (req, res) => {
+    const { newUsername } = req.body;
+    const currentUsername = req.session.user.username;
+
+    db.get('SELECT username FROM users WHERE username = ?', [newUsername], (err, row) => {
+        if (row) {
+            req.session.flash = { type: 'error', message: 'Username is already taken.' };
+            return res.redirect('/settings');
+        }
+        
+        db.serialize(() => {
+            db.run('UPDATE users SET username = ? WHERE username = ?', [newUsername, currentUsername]);
+            db.run('UPDATE files SET owner = ? WHERE owner = ?', [newUsername, currentUsername], (err) => {
+                if (err) {
+                     req.session.flash = { type: 'error', message: 'Failed to update file ownerships.' };
+                     return res.redirect('/settings');
+                }
+                req.session.user.username = newUsername; // Update session
+                req.session.flash = { type: 'success', message: 'Username successfully updated!' };
+                res.redirect('/settings');
+            });
+        });
+    });
+});
+
+app.post('/settings/password', isAuthenticated, (req, res) => {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    const username = req.session.user.username;
+
+    if (newPassword !== confirmPassword) {
+        req.session.flash = { type: 'error', message: 'New passwords do not match.' };
+        return res.redirect('/settings');
+    }
+
+    db.get('SELECT password FROM users WHERE username = ?', [username], async (err, user) => {
+        if (!user || !await bcrypt.compare(currentPassword, user.password)) {
+            req.session.flash = { type: 'error', message: 'Incorrect current password.' };
+            return res.redirect('/settings');
+        }
+
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        db.run('UPDATE users SET password = ? WHERE username = ?', [hashedNewPassword, username], (err) => {
+            if (err) {
+                req.session.flash = { type: 'error', message: 'Error updating password.' };
+            } else {
+                req.session.flash = { type: 'success', message: 'Password successfully updated!' };
+            }
+            res.redirect('/settings');
+        });
+    });
+});
+
 // --- 7. Admin Routes ---
 app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
     db.all("SELECT * FROM users", [], (err, users) => {
         if (err) return res.status(500).send("Database error fetching users.");
         db.all('SELECT * FROM files', [], (err, allFiles) => {
             if (err) return res.status(500).send("Database error fetching files.");
-            const userListHtml = users.length > 0 ? `<ul class="file-list">${users.map(user => {
+            const userListHtml = users.map(user => {
                 const isBanned = user.status === 'banned';
                 let actionsHtml = '';
                 if (user.username !== req.session.user.username) {
-                    actionsHtml += isBanned ? `<form action="/admin/users/status" method="post" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><input type="hidden" name="action" value="unban"><button type="submit" class="btn btn-success">Unban</button></form>`
+                    actionsHtml += isBanned ? `<form action="/admin/users/status" method="post"><input type="hidden" name="username" value="${user.username}"><input type="hidden" name="action" value="unban"><button type="submit" class="btn btn-success">Unban</button></form>`
                                            : `<button type="button" class="btn btn-danger open-ban-modal" data-username="${user.username}">Ban</button>`;
-                    if (user.role !== 'admin') actionsHtml += `<form action="/admin/users/promote" method="post" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-secondary">Promote</button></form>`;
-                    actionsHtml += `<form action="/admin/users/delete" method="post" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-danger">Delete</button></form>`;
+                    if (user.role !== 'admin') actionsHtml += `<form action="/admin/users/promote" method="post"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-secondary">Promote</button></form>`;
+                    actionsHtml += `<form action="/admin/users/delete" method="post"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-danger">Delete</button></form>`;
                 } else {
                     actionsHtml = '<span style="color:var(--text-secondary)">(This is you)</span>';
                 }
@@ -535,29 +520,18 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                             <div class="file-details">
                                 <span class="file-name">${user.username} <span style="font-weight:400; font-size:0.9rem; color:var(--${isBanned ? 'danger' : 'success'}-color);">- ${isBanned ? 'Banned' : 'Active'}</span></span>
                                 <div class="file-meta">Role: ${user.role} &bull; IP: ${user.last_login_ip || 'N/A'}</div>
-                            </div>
-                            <div class="file-actions">${actionsHtml}</div>
-                        </li>`;
-            }).join('')}</ul>` : '<p>No users to manage.</p>';
-
-            const fileListHtml = allFiles.length > 0 ? `<ul class="file-list">${allFiles.map(file => `
+                            </div><div class="file-actions">${actionsHtml}</div></li>`;
+            }).join('');
+            const fileListHtml = allFiles.map(file => `
                 <li class="file-item glass-panel">
                     <div class="file-details">
                         <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${file.originalName}</a>
                         <div class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div>
-                    </div>
-                    <div class="file-actions">
-                        <form action="/admin/files/delete" method="post" style="margin:0;"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
-                    </div>
-                </li>`
-            ).join('')}</ul>` : '<p>No files uploaded by any user yet.</p>';
-
-            const bodyContent = `
-                <main>
-                    <h1 class="page-title">Admin Panel</h1>
-                    <div class="glass-panel" style="margin-bottom: 30px;"><h2 class="section-header">Manage Users</h2>${userListHtml}</div>
-                    <div class="glass-panel"><h2 class="section-header">Manage All Files</h2>${fileListHtml}</div>
-                </main>`;
+                    </div><div class="file-actions"><form action="/admin/files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
+            ).join('');
+            const bodyContent = `<main><h1 class="page-title">Admin Panel</h1>
+                <div class="glass-panel" style="margin-bottom: 30px;"><h2 class="section-header">Manage Users</h2><ul class="file-list">${userListHtml}</ul></div>
+                <div class="glass-panel"><h2 class="section-header">Manage All Files</h2><ul class="file-list">${fileListHtml}</ul></div></main>`;
             renderPage(res, bodyContent, { title: 'Admin Panel' });
         });
     });
