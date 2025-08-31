@@ -30,7 +30,6 @@ db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, embed_type TEXT NOT NULL DEFAULT 'card')`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_fingerprints (fingerprint TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
-    // NEW: Table for global settings like lockdown mode
     db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 });
 
@@ -44,7 +43,6 @@ function loadSiteSettings() {
             siteSettings[row.key] = row.value;
         });
 
-        // Initialize default settings if they don't exist
         if (!siteSettings.hasOwnProperty('lockdown')) {
             db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('lockdown', 'false')`, [], () => {
                 siteSettings.lockdown = 'false';
@@ -53,7 +51,6 @@ function loadSiteSettings() {
         console.log('✅ Site settings loaded.');
     });
 }
-
 
 // --- 2. Security & Core Middleware ---
 app.set('trust proxy', 1);
@@ -75,30 +72,6 @@ app.use(helmet({
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-7', legacyHeaders: false }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
-
-// --- NEW: Lockdown Middleware ---
-const lockdownMiddleware = (req, res, next) => {
-    // Check if lockdown is enabled
-    if (siteSettings.lockdown === 'true') {
-        // Allow access if user is a logged-in admin
-        if (req.session.user && req.session.user.role === 'admin') {
-            return next();
-        }
-
-        // Allow access to essential pages like login/logout
-        const allowedPaths = ['/login', '/logout'];
-        if (allowedPaths.includes(req.path)) {
-            return next();
-        }
-
-        // Block everyone else
-        const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1>🚧 Site Under Maintenance</h1><p>Please check back later. Only administrators can log in at this time.</p></div></main>`;
-        return renderPage(res, bodyContent, { title: 'Maintenance', hideNav: true });
-    }
-    // If not in lockdown, proceed normally
-    next();
-};
-app.use(lockdownMiddleware); // Apply the lockdown middleware to all requests
 
 function generateFingerprint(req) {
     const userAgent = req.headers['user-agent'] || '';
@@ -130,11 +103,29 @@ app.use((req, res, next) => {
 });
 
 app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: true, cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'strict' } }));
+
 app.use((req, res, next) => {
     res.locals.user = req.session.user;
     if (req.session.flash) { res.locals.flash = req.session.flash; delete req.session.flash; }
     next();
 });
+
+// --- Lockdown Middleware (Correct Position) ---
+const lockdownMiddleware = (req, res, next) => {
+    if (siteSettings.lockdown === 'true') {
+        if (req.session.user && req.session.user.role === 'admin') {
+            return next();
+        }
+        const allowedPaths = ['/login', '/logout'];
+        if (allowedPaths.includes(req.path)) {
+            return next();
+        }
+        const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1>🚧 Site Under Maintenance</h1><p>Please check back later. Only administrators can log in at this time.</p></div></main>`;
+        return renderPage(res, bodyContent, { title: 'Maintenance', hideNav: true });
+    }
+    next();
+};
+app.use(lockdownMiddleware);
 
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
@@ -162,10 +153,10 @@ function renderPage(res, bodyContent, options = {}) {
         <nav class="navbar glass-panel">
             <a href="/" class="nav-brand">The Vault</a>
             <div class="nav-links">
-                ${res.locals.user.role === 'admin' ? '<a href="/admin" class="nav-link">Admin Panel</a>' : ''}
-                <a href="/my-files" class="nav-link">My Files</a>
-                <a href="/settings" class="nav-link">Settings</a>
-                <a href="/logout" class="nav-link">Logout</a>
+                ${res.locals.user && res.locals.user.role === 'admin' ? '<a href="/admin" class="nav-link">Admin Panel</a>' : ''}
+                ${res.locals.user ? '<a href="/my-files" class="nav-link">My Files</a>' : ''}
+                ${res.locals.user ? '<a href="/settings" class="nav-link">Settings</a>' : ''}
+                ${res.locals.user ? '<a href="/logout" class="nav-link">Logout</a>' : ''}
             </div>
         </nav>`;
 
@@ -594,7 +585,6 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                     </div><div class="file-actions"><form action="/admin/files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
             ).join('');
             
-            // NEW: Lockdown section logic
             const isLockdownEnabled = siteSettings.lockdown === 'true';
             const lockdownButtonClass = isLockdownEnabled ? 'btn-success' : 'btn-danger';
             const lockdownButtonText = isLockdownEnabled ? 'Disable Lockdown' : 'Enable Lockdown';
@@ -619,15 +609,14 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
 
 app.post('/admin/lockdown', isAuthenticated, isAdmin, (req, res) => {
     const isCurrentlyLocked = siteSettings.lockdown === 'true';
-    const newLockdownState = !isCurrentlyLocked; // Flip the boolean state
-    const newLockdownValue = newLockdownState ? 'true' : 'false'; // Convert to string for DB
+    const newLockdownState = !isCurrentlyLocked;
+    const newLockdownValue = newLockdownState ? 'true' : 'false';
 
     db.run(`UPDATE settings SET value = ? WHERE key = 'lockdown'`, [newLockdownValue], function(err) {
         if (err) {
             console.error("Failed to update lockdown state:", err.message);
             return res.redirect('/admin');
         }
-        // Update in-memory settings immediately
         siteSettings.lockdown = newLockdownValue;
         console.log(`Website lockdown state changed to: ${siteSettings.lockdown}`);
         res.redirect('/admin');
