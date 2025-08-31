@@ -108,7 +108,6 @@ function formatBytes(bytes, decimals = 2) { if (!+bytes) return '0 Bytes'; const
 const isAuthenticated = (req, res, next) => { if (!req.session.user) return res.redirect('/login'); next(); };
 const isAdmin = (req, res, next) => { if (req.session.user && req.session.user.role === 'admin') return next(); res.status(403).send('<h1>403 Forbidden</h1>'); };
 
-// --- NEW: Cloudflare Turnstile Verification Middleware ---
 const verifyTurnstile = async (req, res, next) => {
     const token = req.body['cf-turnstile-response'];
     const ip = req.ip;
@@ -132,7 +131,7 @@ const verifyTurnstile = async (req, res, next) => {
         const data = await response.json();
 
         if (data.success) {
-            next(); // Verification successful, proceed to the next handler
+            next();
         } else {
             req.session.flash = { type: 'error', message: 'CAPTCHA verification failed. Please try again.' };
             res.redirect('back');
@@ -392,7 +391,7 @@ app.get('/register', (req, res) => {
                     <input type="text" name="username" placeholder="Username" required>
                     <input type="password" name="password" placeholder="Password" required>
                     <input type="password" name="confirmPassword" placeholder="Confirm Password" required>
-                    <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY_HERE"></div>
+                    <div class="cf-turnstile" data-sitekey="0x4AAAAAABw0ikMjkXuWpWm0"></div>
                     <button type="submit" class="btn btn-primary">Register</button>
                     <p class="fine-print text-center">Have an account already? <a href="/login">Login here</a></p>
                 </form>
@@ -434,7 +433,7 @@ app.get('/login', (req, res) => {
                     ${message ? `<div class="flash-message ${type === 'success' ? 'flash-success' : 'flash-error'}">${message}</div>` : ''}
                     <input type="text" name="username" placeholder="Username" required>
                     <input type="password" name="password" placeholder="Password" required>
-                    <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY_HERE"></div>
+                    <div class="cf-turnstile" data-sitekey="0x4AAAAAABw0ikMjkXuWpWm0"></div>
                     <button type="submit" class="btn btn-primary">Login</button>
                     <p class="fine-print text-center">Don't have an account? <a href="/register">Register here</a></p>
                 </form>
