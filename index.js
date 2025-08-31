@@ -25,8 +25,9 @@ const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqli
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT, last_fingerprint TEXT, ban_reason TEXT)`);
     db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, embed_type TEXT NOT NULL DEFAULT 'card')`);
-    db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
-    db.run(`CREATE TABLE IF NOT EXISTS banned_fingerprints (fingerprint TEXT PRIMARY KEY NOT NULL, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+    // UPDATED TABLES to store ban reasons
+    db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+    db.run(`CREATE TABLE IF NOT EXISTS banned_fingerprints (fingerprint TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
 });
 
 // --- 2. Security & Core Middleware ---
@@ -57,19 +58,22 @@ function generateFingerprint(req) {
     return crypto.createHash('sha256').update(fingerprintString).digest('hex');
 }
 
+// --- UPDATED MIDDLEWARE to show ban reason on Access Denied page ---
 app.use((req, res, next) => {
     const userIp = req.ip;
     const fingerprint = generateFingerprint(req);
-    db.get('SELECT ip FROM banned_ips WHERE ip = ?', [userIp], (err, ipRow) => {
+    db.get('SELECT * FROM banned_ips WHERE ip = ?', [userIp], (err, ipRow) => {
         if (err) return next();
         if (ipRow) {
-            const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1>Access Denied</h1><p>Your IP address has been banned.</p></div></main>`;
+            const reason = ipRow.reason || "No reason provided";
+            const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">🚫 Access Denied</h1><p style="font-size: 1.1rem;">This IP address has been banned by an Admin!<br><strong>Reason:</strong> ${reason}</p></div></main>`;
             return renderPage(res, bodyContent, { title: 'Access Denied', hideNav: true });
         }
-        db.get('SELECT fingerprint FROM banned_fingerprints WHERE fingerprint = ?', [fingerprint], (err, fpRow) => {
+        db.get('SELECT * FROM banned_fingerprints WHERE fingerprint = ?', [fingerprint], (err, fpRow) => {
             if (err) return next();
             if (fpRow) {
-                const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1>Access Denied</h1><p>Your device has been banned.</p></div></main>`;
+                const reason = fpRow.reason || "No reason provided";
+                const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">🚫 Access Denied</h1><p style="font-size: 1.1rem;">This device has been banned by an Admin!<br><strong>Reason:</strong> ${reason}</p></div></main>`;
                 return renderPage(res, bodyContent, { title: 'Access Denied', hideNav: true });
             }
             next();
@@ -182,9 +186,9 @@ function renderPage(res, bodyContent, options = {}) {
             <div id="copy-confirm"></div>
             <div id="ban-modal" class="modal-overlay">
                 <div class="modal-content glass-panel">
-                    <h3>Provide Ban Reason</h3>
+                    <h3>Confirm User Ban</h3>
                     <form id="ban-reason-form" method="post" action="/admin/users/status">
-                        <input type="text" id="ban-reason-input" name="reason" placeholder="Reason for ban (e.g., spamming)" required>
+                        <input type="text" id="ban-reason-input" name="reason" placeholder="Enter reason for the ban..." required>
                         <input type="hidden" id="ban-username-input" name="username">
                         <input type="hidden" name="action" value="ban">
                         <div class="modal-actions">
@@ -537,17 +541,34 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
     });
 });
 
+// --- UPDATED ROUTE to manage IP/fingerprint bans along with user status ---
 app.post('/admin/users/status', isAuthenticated, isAdmin, (req, res) => {
     const { username, action, reason } = req.body;
     const newStatus = action === 'ban' ? 'banned' : 'active';
     const banReason = action === 'ban' ? (reason || "No reason provided.") : null;
+
     if (username === req.session.user.username) return res.redirect('/admin');
-    if (action === 'ban') {
-        db.get('SELECT last_login_ip, last_fingerprint FROM users WHERE username = ?', [username], (err, user) => {
-            if (user && user.last_login_ip) db.run('INSERT OR IGNORE INTO banned_ips (ip) VALUES (?)', [user.last_login_ip]);
-            if (user && user.last_fingerprint) db.run('INSERT OR IGNORE INTO banned_fingerprints (fingerprint) VALUES (?)', [user.last_fingerprint]);
-        });
-    }
+
+    db.get('SELECT last_login_ip, last_fingerprint FROM users WHERE username = ?', [username], (err, user) => {
+        if (err) { console.error(err); return res.redirect('/admin'); }
+
+        if (action === 'ban') {
+            if (user && user.last_login_ip) {
+                db.run('INSERT OR REPLACE INTO banned_ips (ip, banned_user, reason) VALUES (?, ?, ?)', [user.last_login_ip, username, banReason]);
+            }
+            if (user && user.last_fingerprint) {
+                db.run('INSERT OR REPLACE INTO banned_fingerprints (fingerprint, banned_user, reason) VALUES (?, ?, ?)', [user.last_fingerprint, username, banReason]);
+            }
+        } else { // action === 'unban'
+            if (user && user.last_login_ip) {
+                db.run('DELETE FROM banned_ips WHERE ip = ?', [user.last_login_ip]);
+            }
+            if (user && user.last_fingerprint) {
+                db.run('DELETE FROM banned_fingerprints WHERE fingerprint = ?', [user.last_fingerprint]);
+            }
+        }
+    });
+
     db.run("UPDATE users SET status = ?, ban_reason = ? WHERE username = ?", [newStatus, banReason, username], () => res.redirect('/admin'));
 });
 
