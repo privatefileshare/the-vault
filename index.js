@@ -336,7 +336,7 @@ function renderPage(res, bodyContent, options = {}) {
                                     setTimeout(() => window.location.reload(), 1000);
                                 } else {
                                     const errorData = await response.json();
-                                    uploadStatus.textContent = `Error while uploading! ${errorData.message || ''}`;
+                                    uploadStatus.textContent = \`Error while uploading! \${errorData.message || ''}\`;
                                     uploadStatus.className = 'error';
                                     uploadBtn.disabled = false;
                                 }
@@ -673,7 +673,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                         <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${file.originalName}</a>
                         <div class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div>
                     </div><div class="file-actions"><form action="/admin/files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
-            }).join('');
+            ).join('');
             
             const isLockdownEnabled = siteSettings.lockdown === 'true';
             const lockdownButtonClass = isLockdownEnabled ? 'btn-success' : 'btn-danger';
