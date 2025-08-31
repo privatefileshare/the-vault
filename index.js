@@ -37,7 +37,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// UPDATED: More specific Helmet configuration to fix style loading
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
@@ -151,8 +150,7 @@ function renderPage(res, bodyContent, options = {}) {
             .flash-success { background-color: rgba(34, 197, 94, 0.2); border: 1px solid var(--success-color); }
             .flash-error { background-color: rgba(244, 63, 94, 0.2); border: 1px solid var(--danger-color); }
             .text-center { text-align: center; }
-            .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
-            .modal-content { padding: 30px; width: 90%; max-width: 500px; }
+            .upload-actions { display: flex; align-items: center; gap: 15px; }
             #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
 
             @media (max-width: 768px) {
@@ -188,13 +186,12 @@ function renderPage(res, bodyContent, options = {}) {
             </div>
             
             <script type="module" nonce="${res.locals.nonce}">
-                import FingerprintJS from 'https://fpjscdn.net/v3/d832598319c5c709a416a4918e38a221';
-                const fpPromise = FingerprintJS.load();
-
+                // FIXED: Using dynamic import() to load the ES module correctly
                 function getFingerprint() {
-                    return new Promise((resolve) => {
-                         fpPromise.then(fp => fp.get()).then(result => resolve(result.visitorId));
-                    });
+                    return import('https://fpjscdn.net/v3/d832598319c5c709a416a4918e38a221')
+                        .then(FingerprintJS => FingerprintJS.load())
+                        .then(fp => fp.get())
+                        .then(result => result.visitorId);
                 }
                 
                 document.addEventListener('DOMContentLoaded', () => {
@@ -223,18 +220,17 @@ function renderPage(res, bodyContent, options = {}) {
                         banModal.querySelector('#cancel-ban-btn').addEventListener('click', () => { banModal.style.display = 'none'; });
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) { banModal.style.display = 'none'; } });
                     }
+                    
+                    const fileInput = document.getElementById('file-input');
+                    if (fileInput) {
+                        const fileNameDisplay = document.getElementById('file-name-display');
+                        fileInput.addEventListener('change', function() {
+                           fileNameDisplay.textContent = this.files.length > 0 ? this.files[0].name : 'No file selected';
+                        });
+                    }
 
                     const uploadForm = document.getElementById('upload-form');
                     if (uploadForm) {
-                        const fileInput = uploadForm.querySelector('#file-input');
-                        const fileNameDisplay = uploadForm.querySelector('#file-name-display');
-                        
-                        if(fileInput && fileNameDisplay) {
-                            fileInput.addEventListener('change', function() {
-                               fileNameDisplay.textContent = this.files.length > 0 ? this.files[0].name : 'No file selected';
-                            });
-                        }
-
                         uploadForm.addEventListener('submit', function(e) {
                             e.preventDefault();
                             const formData = new FormData(uploadForm);
