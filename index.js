@@ -37,11 +37,14 @@ app.use((req, res, next) => {
     next();
 });
 
+// UPDATED: Comprehensive Helmet configuration for styles, scripts, and fonts
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
             "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fpjscdn.net"],
+            "style-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fonts.googleapis.com"],
+            "font-src": ["'self'", "https://fonts.gstatic.com"],
         },
     },
 }));
@@ -113,7 +116,7 @@ function renderPage(res, bodyContent, options = {}) {
         ${options.metaTags || ''}
         <link rel="icon" type="image/png" href="/favicon.png">
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-        <style>
+        <style nonce="${res.locals.nonce}">
             :root {
                 --primary-purple: #a855f7; --glow-purple: rgba(168, 85, 247, 0.5);
                 --text-primary: #e5e7eb; --text-secondary: #9ca3af;
@@ -130,13 +133,23 @@ function renderPage(res, bodyContent, options = {}) {
             .page-title { font-size: 2.5rem; font-weight: 700; background: linear-gradient(90deg, #ec4899, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0 0 30px 0; }
             .section-header { font-size: 1.5rem; font-weight: 600; margin: 0 0 20px 0; color: var(--primary-purple); border-bottom: 1px solid var(--glass-border); padding-bottom: 10px; }
             .btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; color: white; font-weight: 500; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; font-size: 1rem; }
+            .btn-primary { background-color: var(--primary-purple); } .btn-primary:hover { background-color: #9333ea; box-shadow: 0 0 20px var(--glow-purple); transform: translateY(-2px); }
+            .btn-secondary { background-color: rgba(255, 255, 255, 0.1); border: 1px solid var(--glass-border); } .btn-secondary:hover { background-color: rgba(255, 255, 255, 0.2); }
+            .btn-danger { background-color: var(--danger-color); } .btn-danger:hover { background-color: #be123c; box-shadow: 0 0 20px var(--danger-glow); }
+            .btn-success { background-color: var(--success-color); } .btn-success:hover { background-color: #16a34a; box-shadow: 0 0 20px var(--success-glow); }
             .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding: 15px 30px; }
+            .nav-brand { font-size: 1.5rem; font-weight: bold; color: var(--text-primary); text-decoration: none; }
+            .nav-links { display: flex; gap: 20px; }
+            .nav-link { color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s; } .nav-link:hover { color: var(--primary-purple); }
             form { display: flex; flex-direction: column; gap: 20px; margin: 0; padding: 0; }
-            input[type="text"], input[type="password"] { background-color: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; }
+            .text-center { text-align: center; }
+            input[type="text"], input[type="password"] { background-color: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 12px; border-radius: 8px; font-size: 1em; transition: all 0.2s ease; }
+            input:focus { border-color: var(--primary-purple); box-shadow: 0 0 10px 1px var(--glow-purple); outline: none; }
             .file-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; }
             .file-item { display: flex; align-items: center; gap: 15px; padding: 20px; }
             .file-details { flex-grow: 1; overflow: hidden; }
             .file-name { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); }
+            .file-meta { font-size: 0.9rem; color: var(--text-secondary); }
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             .file-input-hidden { display: none; }
             .progress-bar-container { width: 100%; background-color: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden; height: 10px; display: none; margin-top: 10px; }
@@ -146,7 +159,8 @@ function renderPage(res, bodyContent, options = {}) {
             .flash-message { padding: 15px; margin-bottom: 20px; border-radius: 8px; text-align: center; }
             .flash-success { background-color: rgba(34, 197, 94, 0.2); border: 1px solid var(--success-color); }
             .flash-error { background-color: rgba(244, 63, 94, 0.2); border: 1px solid var(--danger-color); }
-            .text-center { text-align: center; }
+            .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
+            .modal-content { padding: 30px; width: 90%; max-width: 500px; }
 
             @media (max-width: 768px) {
                 body { padding: 20px 10px; }
@@ -385,7 +399,7 @@ app.get('/share/:id', (req, res) => {
                 embedContent = `<p>Direct preview is not available.</p><a href="${fileUrl}" class="btn btn-primary">Download File</a>`;
             }
         } else {
-            embedContent = `<div class="share-card">...</div>`; // Placeholder
+            embedContent = `<div class="share-card"><div class="share-details"><p class="share-filename" title="${file.originalName}">${file.originalName}</p><p class="share-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</p></div><a href="${fileUrl}" class="btn btn-primary">Download</a></div>`;
         }
         const body = `<main class="centered-container"><div class="glass-panel" style="width:100%;max-width:600px;"><h2 class="section-header">Shared File</h2>${embedContent}</div></main>`;
         renderPage(res, body, { title: `Share - ${file.originalName}`, hideNav: true, metaTags: metaTags });
@@ -403,12 +417,16 @@ app.get('/download/:id', (req, res) => {
 app.get('/register', (req, res) => {
     if (req.session.user) return res.redirect('/my-files');
     const flash = res.locals.flash ? `<p class="flash-message flash-error">${res.locals.flash.message}</p>` : '';
-    const bodyContent = `<main class="centered-container"><div class="glass-panel" style="max-width:450px;width:100%;"><form class="fingerprint-form" action="/register" method="post"><h1 class="page-title text-center">Create Account</h1>${flash}<input type="text" name="username" placeholder="Username" required><input type="password" name="password" placeholder="Password" required><input type="password" name="confirmPassword" placeholder="Confirm Password" required><button type="submit" class="btn btn-primary">Register</button><p class="fine-print text-center">Have an account already? <a href="/login">Login here</a></p></form></div></main>`;
+    const bodyContent = `<main class="centered-container"><div class="glass-panel" style="max-width:450px;width:100%;"><form class="fingerprint-form" action="/register" method="post"><h1 class="page-title text-center">Create Account</h1>${flash}<input type="text" name="username" placeholder="Username" required><input type="password" name="password" placeholder="Password" required><input type="password" name="confirmPassword" placeholder="Confirm Password" required><button type="submit" class="btn btn-primary">Register</button><p class="fine-print text-center" style="margin-top:20px;">Have an account already? <a href="/login">Login here</a></p></form></div></main>`;
     renderPage(res, bodyContent, { title: 'Register', hideNav: true });
 });
 
 app.post('/register', (req, res) => {
     const { username, password, confirmPassword, fingerprint } = req.body;
+    if (!username || !password) {
+        req.session.flash = { type: 'error', message: 'Username and password are required.'};
+        return res.redirect('/register');
+    }
     if (password !== confirmPassword) {
         req.session.flash = { type: 'error', message: 'Passwords do not match.' };
         return res.redirect('/register');
@@ -429,7 +447,7 @@ app.post('/register', (req, res) => {
 app.get('/login', (req, res) => {
     if (req.session.user) return res.redirect('/my-files');
     const flash = res.locals.flash ? `<p class="flash-message flash-error">${res.locals.flash.message}</p>` : '';
-    const bodyContent = `<main class="centered-container"><div class="glass-panel" style="max-width:450px;width:100%;"><form class="fingerprint-form" action="/login" method="post"><h1 class="page-title text-center">Welcome Back</h1>${flash}<input type="text" name="username" placeholder="Username" required><input type="password" name="password" placeholder="Password" required><button type="submit" class="btn btn-primary">Login</button><p class="fine-print text-center">Don't have an account? <a href="/register">Register here</a></p></form></div></main>`;
+    const bodyContent = `<main class="centered-container"><div class="glass-panel" style="max-width:450px;width:100%;"><form class="fingerprint-form" action="/login" method="post"><h1 class="page-title text-center">Welcome Back</h1>${flash}<input type="text" name="username" placeholder="Username" required><input type="password" name="password" placeholder="Password" required><button type="submit" class="btn btn-primary">Login</button><p class="fine-print text-center" style="margin-top:20px;">Don't have an account? <a href="/register">Register here</a></p></form></div></main>`;
     renderPage(res, bodyContent, { title: 'Login', hideNav: true });
 });
 
@@ -493,7 +511,7 @@ app.post('/settings/username', isAuthenticated, (req, res) => {
         }
         db.run('UPDATE files SET owner = ? WHERE owner = ?', [newUsername, req.session.user.username]);
         db.run('UPDATE users SET username = ? WHERE id = ?', [newUsername, req.session.user.id], () => {
-            req.session.user.username = newUsername; // Update session
+            req.session.user.username = newUsername;
             req.session.flash = { type: 'success', message: 'Username updated successfully!' };
             res.redirect('/settings');
         });
@@ -520,9 +538,25 @@ app.post('/settings/password', isAuthenticated, (req, res) => {
 app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
     db.all("SELECT * FROM users", [], (err, users) => {
         db.all('SELECT * FROM files', [], (err, allFiles) => {
-            const userListHtml = `...`; // Unchanged
-            const fileListHtml = `...`; // Unchanged
-            renderPage(res, `<main>...</main>`, { title: 'Admin Panel' });
+            const userListHtml = `<ul class="file-list">${users.map(user => {
+                const isBanned = user.status === 'banned';
+                let actionsHtml = '';
+                if (user.username !== req.session.user.username) {
+                    actionsHtml += isBanned ? `<form action="/admin/users/status" method="post" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><input type="hidden" name="action" value="unban"><button type="submit" class="btn btn-success">Unban</button></form>`
+                                           : `<button type="button" class="btn btn-danger open-ban-modal" data-username="${user.username}">Ban</button>`;
+                    if (user.role !== 'admin') actionsHtml += `<form action="/admin/users/promote" method="post" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-secondary">Promote</button></form>`;
+                    actionsHtml += `<form action="/admin/users/delete" method="post" style="margin:0;"><input type="hidden" name="username" value="${user.username}"><button type="submit" class="btn btn-danger">Delete</button></form>`;
+                } else {
+                    actionsHtml = '<span style="color:var(--text-secondary)">(This is you)</span>';
+                }
+                return `<li class="file-item glass-panel"><div class="file-details"><span class="file-name">${user.username}</span><div class="file-meta">Role: ${user.role} &bull; IP: ${user.last_login_ip || 'N/A'}</div></div><div class="file-actions">${actionsHtml}</div></li>`;
+            }).join('')}</ul>`;
+
+            const fileListHtml = `<ul class="file-list">${allFiles.map(file => `
+                <li class="file-item glass-panel"><div class="file-details"><a href="/share/${file.id}" class="file-name" title="${file.originalName}">${file.originalName}</a><div class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div></div><div class="file-actions"><form action="/admin/files/delete" method="post" style="margin:0;"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
+            ).join('')}</ul>`;
+
+            renderPage(res, `<main><h1 class="page-title">Admin Panel</h1><div class="glass-panel" style="margin-bottom: 30px;"><h2 class="section-header">Manage Users</h2>${userListHtml}</div><div class="glass-panel"><h2 class="section-header">Manage All Files</h2>${fileListHtml}</div></main>`, { title: 'Admin Panel' });
         });
     });
 });
