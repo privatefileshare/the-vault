@@ -25,7 +25,6 @@ const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqli
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT, last_fingerprint TEXT, ban_reason TEXT)`);
     db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, embed_type TEXT NOT NULL DEFAULT 'card')`);
-    // UPDATED TABLES to store ban reasons
     db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_fingerprints (fingerprint TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
 });
@@ -58,7 +57,7 @@ function generateFingerprint(req) {
     return crypto.createHash('sha256').update(fingerprintString).digest('hex');
 }
 
-// --- UPDATED MIDDLEWARE to show ban reason on Access Denied page ---
+// --- UPDATED MIDDLEWARE with the requested ban message ---
 app.use((req, res, next) => {
     const userIp = req.ip;
     const fingerprint = generateFingerprint(req);
@@ -66,20 +65,21 @@ app.use((req, res, next) => {
         if (err) return next();
         if (ipRow) {
             const reason = ipRow.reason || "No reason provided";
-            const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">🚫 Access Denied</h1><p style="font-size: 1.1rem;">This IP address has been banned by an Admin!<br><strong>Reason:</strong> ${reason}</p></div></main>`;
+            const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">🚫 Access Denied</h1><p style="font-size: 1.1rem;">You have been banned by an administrator!<br><strong>Reason:</strong> ${reason}</p></div></main>`;
             return renderPage(res, bodyContent, { title: 'Access Denied', hideNav: true });
         }
         db.get('SELECT * FROM banned_fingerprints WHERE fingerprint = ?', [fingerprint], (err, fpRow) => {
             if (err) return next();
             if (fpRow) {
                 const reason = fpRow.reason || "No reason provided";
-                const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">🚫 Access Denied</h1><p style="font-size: 1.1rem;">This device has been banned by an Admin!<br><strong>Reason:</strong> ${reason}</p></div></main>`;
+                const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1 class="page-title">🚫 Access Denied</h1><p style="font-size: 1.1rem;">You have been banned by an administrator!<br><strong>Reason:</strong> ${reason}</p></div></main>`;
                 return renderPage(res, bodyContent, { title: 'Access Denied', hideNav: true });
             }
             next();
         });
     });
 });
+
 
 app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: true, cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'strict' } }));
 app.use((req, res, next) => {
@@ -541,7 +541,6 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
     });
 });
 
-// --- UPDATED ROUTE to manage IP/fingerprint bans along with user status ---
 app.post('/admin/users/status', isAuthenticated, isAdmin, (req, res) => {
     const { username, action, reason } = req.body;
     const newStatus = action === 'ban' ? 'banned' : 'active';
