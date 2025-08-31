@@ -120,7 +120,7 @@ const lockdownMiddleware = (req, res, next) => {
         if (allowedPaths.includes(req.path)) {
             return next();
         }
-        const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1>🔒 The Vault has been locked!</h1><p>This lock has been placed by an administrator. Please check back later.</p></div></main>`;
+        const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1>🔒 The Vault has been locked!</h1><p>This is a global site lock placed by an administrator, check back later.</p></div></main>`;
         return renderPage(res, bodyContent, { title: 'Site Locked', hideNav: true });
     }
     next();
@@ -178,7 +178,7 @@ function renderPage(res, bodyContent, options = {}) {
             @keyframes rotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
             body { font-family: 'Inter', sans-serif; margin: 0; background-color: #111827; color: var(--text-primary); overflow-x: hidden; position: relative; min-height: 100vh; }
             body::before { content: ''; position: fixed; width: 600px; height: 600px; filter: blur(150px); background-image: linear-gradient(45deg, #7c3aed, #db2777); top: -150px; left: -150px; animation: rotate 20s cubic-bezier(0.8, 0.2, 0.2, 0.8) alternate infinite; border-radius: 9999px; z-index: -1; }
-            .container { max-width: 900px; margin: 0 auto; padding: 20px; z-index: 1; position: relative; }
+            .container { max-width: 1100px; margin: 0 auto; padding: 20px; z-index: 1; position: relative; }
             .centered-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
             .glass-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); padding: 30px; }
             .page-title { font-size: 2.5rem; font-weight: 700; background: linear-gradient(90deg, #ec4899, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0 0 30px 0; }
@@ -287,12 +287,14 @@ app.get('/', (req, res) => {
     `;
 
     const bodyContent = `
-        <main class="centered-container">
-            <div class="glass-panel text-center" style="max-width: 500px;">
-                <h1 class="page-title">Welcome to The Vault</h1>
-                <p style="color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 30px;">Your secure and stylish corner of the cloud.</p>
-                <a href="/register" class="btn btn-primary" style="width: 100%;">Create Your Account</a>
-                <p class="fine-print">Have an account already? <a href="/login">Login here</a></p>
+        <main>
+            <div class="centered-container">
+                <div class="glass-panel text-center" style="max-width: 500px;">
+                    <h1 class="page-title">Welcome to The Vault</h1>
+                    <p style="color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 30px;">Your secure and stylish corner of the cloud.</p>
+                    <a href="/register" class="btn btn-primary" style="width: 100%;">Create Your Account</a>
+                    <p class="fine-print">Have an account already? <a href="/login">Login here</a></p>
+                </div>
             </div>
         </main>`;
     renderPage(res, bodyContent, { title: 'Welcome to The Vault', hideNav: true, metaTags: metaTags });
@@ -326,7 +328,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
                 </form>
             </div>`;
-        const body = `<main>${fileListHtml}${uploadForm}</main>`;
+        const body = `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`;
         renderPage(res, body, { title: 'My Vault' });
     });
 });
@@ -377,7 +379,7 @@ app.get('/share/:id', (req, res) => {
             metaTags += `<meta name="twitter:card" content="summary">`;
         }
         let embedContent = `<div class="share-card"><div class="share-details"><p class="share-filename" title="${file.originalName}">${file.originalName}</p><p class="share-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</p></div><a href="${fileUrl}" class="btn btn-primary">Download</a></div>`;
-        const body = `<main class="centered-container"><div class="glass-panel" style="width:100%; max-width:600px;"><h2 class="section-header">Shared File</h2>${embedContent}</div></main>`;
+        const body = `<main><div class="centered-container"><div class="glass-panel" style="width:100%; max-width:600px;"><h2 class="section-header">Shared File</h2>${embedContent}</div></div></main>`;
         renderPage(res, body, { title: `Share - ${file.originalName}`, hideNav: true, metaTags: metaTags });
     });
 });
@@ -481,24 +483,26 @@ app.get('/logout', (req, res) => {
 app.get('/settings', isAuthenticated, (req, res) => {
     const flash = res.locals.flash || {};
     const bodyContent = `
-        <h1 class="page-title">Account Settings</h1>
-        ${flash.message ? `<div class="flash-message ${flash.type === 'success' ? 'flash-success' : 'flash-error'}">${flash.message}</div>` : ''}
-        <div class="glass-panel" style="margin-bottom: 30px;">
-            <h2 class="section-header">Change Username</h2>
-            <form action="/settings/username" method="post">
-                <input type="text" name="newUsername" placeholder="Enter new username" required>
-                <button type="submit" class="btn btn-primary">Update Username</button>
-            </form>
-        </div>
-        <div class="glass-panel">
-            <h2 class="section-header">Change Password</h2>
-            <form action="/settings/password" method="post">
-                <input type="password" name="currentPassword" placeholder="Current password" required>
-                <input type="password" name="newPassword" placeholder="New password" required>
-                <input type="password" name="confirmPassword" placeholder="Confirm new password" required>
-                <button type="submit" class="btn btn-primary">Update Password</button>
-            </form>
-        </div>
+        <main>
+            <h1 class="page-title">Account Settings</h1>
+            ${flash.message ? `<div class="flash-message ${flash.type === 'success' ? 'flash-success' : 'flash-error'}">${flash.message}</div>` : ''}
+            <div class="glass-panel" style="margin-bottom: 30px;">
+                <h2 class="section-header">Change Username</h2>
+                <form action="/settings/username" method="post">
+                    <input type="text" name="newUsername" placeholder="Enter new username" required>
+                    <button type="submit" class="btn btn-primary">Update Username</button>
+                </form>
+            </div>
+            <div class="glass-panel">
+                <h2 class="section-header">Change Password</h2>
+                <form action="/settings/password" method="post">
+                    <input type="password" name="currentPassword" placeholder="Current password" required>
+                    <input type="password" name="newPassword" placeholder="New password" required>
+                    <input type="password" name="confirmPassword" placeholder="Confirm new password" required>
+                    <button type="submit" class="btn btn-primary">Update Password</button>
+                </form>
+            </div>
+        </main>
     `;
     renderPage(res, bodyContent, { title: 'Settings' });
 });
