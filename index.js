@@ -16,18 +16,44 @@ const PORT = process.env.PORT || 3000;
 const DOMAIN = process.env.DOMAIN || `http://localhost:${PORT}`;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'a_very_insecure_default_secret_for_development';
 
-// --- 1. Database Setup ---
+// --- 1. Database Setup & Global Settings ---
 const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
     if (err) return console.error(err.message);
     console.log('✅ Connected to the SQLite database.');
+    loadSiteSettings(); // Load settings into memory after DB connection
 });
+
+let siteSettings = {}; // In-memory store for site settings
 
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT, last_fingerprint TEXT, ban_reason TEXT)`);
     db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, embed_type TEXT NOT NULL DEFAULT 'card')`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_fingerprints (fingerprint TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+    // NEW: Table for global settings like lockdown mode
+    db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 });
+
+function loadSiteSettings() {
+    db.all('SELECT * FROM settings', [], (err, rows) => {
+        if (err) {
+            console.error("Error loading site settings:", err.message);
+            return;
+        }
+        rows.forEach(row => {
+            siteSettings[row.key] = row.value;
+        });
+
+        // Initialize default settings if they don't exist
+        if (!siteSettings.hasOwnProperty('lockdown')) {
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('lockdown', 'false')`, [], () => {
+                siteSettings.lockdown = 'false';
+            });
+        }
+        console.log('✅ Site settings loaded.');
+    });
+}
+
 
 // --- 2. Security & Core Middleware ---
 app.set('trust proxy', 1);
@@ -49,6 +75,30 @@ app.use(helmet({
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-7', legacyHeaders: false }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
+
+// --- NEW: Lockdown Middleware ---
+const lockdownMiddleware = (req, res, next) => {
+    // Check if lockdown is enabled
+    if (siteSettings.lockdown === 'true') {
+        // Allow access if user is a logged-in admin
+        if (req.session.user && req.session.user.role === 'admin') {
+            return next();
+        }
+
+        // Allow access to essential pages like login/logout
+        const allowedPaths = ['/login', '/logout'];
+        if (allowedPaths.includes(req.path)) {
+            return next();
+        }
+
+        // Block everyone else
+        const bodyContent = `<main class="centered-container"><div class="glass-panel text-center"><h1>🚧 Site Under Maintenance</h1><p>Please check back later. Only administrators can log in at this time.</p></div></main>`;
+        return renderPage(res, bodyContent, { title: 'Maintenance', hideNav: true });
+    }
+    // If not in lockdown, proceed normally
+    next();
+};
+app.use(lockdownMiddleware); // Apply the lockdown middleware to all requests
 
 function generateFingerprint(req) {
     const userAgent = req.headers['user-agent'] || '';
@@ -236,6 +286,15 @@ function renderPage(res, bodyContent, options = {}) {
 // --- 5. Main Routes ---
 app.get('/', (req, res) => {
     if (req.session.user) return res.redirect('/my-files');
+
+    const metaTags = `
+        <meta property="og:title" content="The Vault - Secure File Sharing">
+        <meta property="og:description" content="A secure and stylish corner of the cloud. Log in or register to start uploading files.">
+        <meta property="og:site_name" content="The Vault">
+        <meta property="og:url" content="${DOMAIN}">
+        <meta name="theme-color" content="#a855f7">
+    `;
+
     const bodyContent = `
         <main class="centered-container">
             <div class="glass-panel text-center" style="max-width: 500px;">
@@ -245,7 +304,7 @@ app.get('/', (req, res) => {
                 <p class="fine-print">Have an account already? <a href="/login">Login here</a></p>
             </div>
         </main>`;
-    renderPage(res, bodyContent, { title: 'Welcome to The Vault', hideNav: true });
+    renderPage(res, bodyContent, { title: 'Welcome to The Vault', hideNav: true, metaTags: metaTags });
 });
 
 app.get('/my-files', isAuthenticated, (req, res) => {
@@ -534,13 +593,47 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                         <div class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div>
                     </div><div class="file-actions"><form action="/admin/files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
             ).join('');
+            
+            // NEW: Lockdown section logic
+            const isLockdownEnabled = siteSettings.lockdown === 'true';
+            const lockdownButtonClass = isLockdownEnabled ? 'btn-success' : 'btn-danger';
+            const lockdownButtonText = isLockdownEnabled ? 'Disable Lockdown' : 'Enable Lockdown';
+            const lockdownSection = `
+                <div class="glass-panel" style="margin-bottom: 30px;">
+                    <h2 class="section-header">Site Controls</h2>
+                    <p style="color: var(--text-secondary); margin-top:0;">Website Lockdown is currently <strong>${isLockdownEnabled ? 'ENABLED' : 'DISABLED'}</strong>.</p>
+                    <form action="/admin/lockdown" method="post">
+                        <button type="submit" class="btn ${lockdownButtonClass}">${lockdownButtonText}</button>
+                    </form>
+                </div>
+            `;
+
             const bodyContent = `<main><h1 class="page-title">Admin Panel</h1>
+                ${lockdownSection}
                 <div class="glass-panel" style="margin-bottom: 30px;"><h2 class="section-header">Manage Users</h2><ul class="file-list">${userListHtml}</ul></div>
                 <div class="glass-panel"><h2 class="section-header">Manage All Files</h2><ul class="file-list">${fileListHtml}</ul></div></main>`;
             renderPage(res, bodyContent, { title: 'Admin Panel' });
         });
     });
 });
+
+app.post('/admin/lockdown', isAuthenticated, isAdmin, (req, res) => {
+    const isCurrentlyLocked = siteSettings.lockdown === 'true';
+    const newLockdownState = !isCurrentlyLocked; // Flip the boolean state
+    const newLockdownValue = newLockdownState ? 'true' : 'false'; // Convert to string for DB
+
+    db.run(`UPDATE settings SET value = ? WHERE key = 'lockdown'`, [newLockdownValue], function(err) {
+        if (err) {
+            console.error("Failed to update lockdown state:", err.message);
+            return res.redirect('/admin');
+        }
+        // Update in-memory settings immediately
+        siteSettings.lockdown = newLockdownValue;
+        console.log(`Website lockdown state changed to: ${siteSettings.lockdown}`);
+        res.redirect('/admin');
+    });
+});
+
 
 app.post('/admin/users/status', isAuthenticated, isAdmin, (req, res) => {
     const { username, action, reason } = req.body;
