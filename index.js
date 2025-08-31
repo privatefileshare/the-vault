@@ -37,13 +37,14 @@ app.use((req, res, next) => {
     next();
 });
 
-// UPDATED: Comprehensive Helmet configuration for styles, scripts, and fonts
+// UPDATED: More specific Helmet configuration to fix style loading
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
             "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fpjscdn.net"],
-            "style-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fonts.googleapis.com", "'unsafe-inline'"],
+            "style-src-elem": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fonts.googleapis.com"],
+            "style-src-attr": ["'unsafe-inline'"],
             "font-src": ["'self'", "https://fonts.gstatic.com"],
         },
     },
@@ -150,7 +151,8 @@ function renderPage(res, bodyContent, options = {}) {
             .flash-success { background-color: rgba(34, 197, 94, 0.2); border: 1px solid var(--success-color); }
             .flash-error { background-color: rgba(244, 63, 94, 0.2); border: 1px solid var(--danger-color); }
             .text-center { text-align: center; }
-            .upload-actions { display: flex; align-items: center; gap: 15px; }
+            .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
+            .modal-content { padding: 30px; width: 90%; max-width: 500px; }
             #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
 
             @media (max-width: 768px) {
@@ -348,8 +350,8 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <h2 class="section-header">Upload New File</h2>
                     <div class="upload-actions">
-                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
-                        <span id="file-name-display">No file selected</span>
+                         <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                         <span id="file-name-display">No file selected</span>
                     </div>
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
                     <div class="progress-bar-container" id="progress-bar-container"><div id="progress-bar"></div></div>
@@ -455,7 +457,7 @@ app.post('/register', (req, res) => {
 app.get('/login', (req, res) => {
     if (req.session.user) return res.redirect('/my-files');
     const flash = res.locals.flash ? `<p class="flash-message flash-error">${res.locals.flash.message}</p>` : '';
-    const bodyContent = `<main class="centered-container"><div class="glass-panel" style="max-width:450px;width:100%;"><form class="fingerprint-form" action="/login" method="post"><h1 class="page-title text-center">Welcome Back</h1>${flash}<input type="text" name="username" placeholder="Username" required><input type="password" name="password" placeholder="Password" required><button type="submit" class="btn btn-primary">Login</button><p class="fine-print text-center" style="margin-top:20px;">Don't have an account? <a href="/register">Register here</a></p></form></div></main>`;
+    const bodyContent = `<main class="centered-container"><div class="glass-panel" style="max-width:450px;width:100%;"><form class="fingerprint-form" action="/login" method="post"><h1 class="page-title text-center">Welcome Back</h1>${flash}<input type="text" name="username" placeholder="Username" required><input type="password" name="password" placeholder="Password" required><button type="submit" class="btn btn-primary">Login</button><p class="fine-print" style="margin-top:20px;">Don't have an account? <a href="/register">Register here</a></p></form></div></main>`;
     renderPage(res, bodyContent, { title: 'Login', hideNav: true });
 });
 
