@@ -145,16 +145,15 @@ const upload = multer({
             cb(null, uniquePrefix + '-' + cleanFilename);
         }
     }),
-    limits: { fileSize: 500 * 1024 * 1024 }
+    limits: { fileSize: 10 * 1024 * 1024 * 1024 } // 10 GB Limit
 });
 
 // --- 3. Helper Functions & Middleware ---
 function formatBytes(bytes, decimals = 2) { if (!+bytes) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ["Bytes", "KB", "MB", "GB", "TB"]; const i = Math.floor(Math.log(bytes) / Math.log(k)); return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`; }
 
-// NEW: Helper function to get an SVG icon based on file extension
 function getFileTypeIcon(filename) {
     const extension = path.extname(filename).toLowerCase().substring(1);
-    const svgIcon = (path, a = "") => `<svg class="file-type-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${a}>${path}</svg>`;
+    const svgIcon = (path) => `<svg class="file-type-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 
     const iconMap = {
         'jpg': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`),
@@ -176,7 +175,6 @@ function getFileTypeIcon(filename) {
         'html': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`),
     };
     
-    // Use a default icon if no specific match is found
     const defaultIcon = svgIcon(`<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>`);
 
     return iconMap[extension] || defaultIcon;
