@@ -145,7 +145,7 @@ const upload = multer({
             cb(null, uniquePrefix + '-' + cleanFilename);
         }
     }),
-    limits: { fileSize: 10 * 1024 * 1024 * 1024 } // 10 GB Limit
+    limits: { fileSize: 10 * 1024 * 1024 * 1024 }
 });
 
 // --- 3. Helper Functions & Middleware ---
@@ -154,29 +154,15 @@ function formatBytes(bytes, decimals = 2) { if (!+bytes) return '0 Bytes'; const
 function getFileTypeIcon(filename) {
     const extension = path.extname(filename).toLowerCase().substring(1);
     const svgIcon = (path) => `<svg class="file-type-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
-
     const iconMap = {
-        'jpg': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`),
-        'png': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`),
-        'gif': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`),
-        'webp': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`),
-        'mp4': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`),
-        'mov': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`),
-        'webm': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`),
-        'mp3': svgIcon(`<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>`),
-        'wav': svgIcon(`<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>`),
-        'pdf': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`),
-        'doc': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`),
-        'docx': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`),
-        'zip': svgIcon(`<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>`),
-        'rar': svgIcon(`<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>`),
-        'js': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`),
-        'css': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`),
-        'html': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`),
+        'jpg': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`), 'png': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`), 'gif': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`), 'webp': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`),
+        'mp4': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`), 'mov': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`), 'webm': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`),
+        'mp3': svgIcon(`<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>`), 'wav': svgIcon(`<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>`),
+        'pdf': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`), 'doc': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`), 'docx': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`),
+        'zip': svgIcon(`<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>`), 'rar': svgIcon(`<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>`),
+        'js': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`), 'css': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`), 'html': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`),
     };
-    
     const defaultIcon = svgIcon(`<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>`);
-
     return iconMap[extension] || defaultIcon;
 }
 
@@ -267,6 +253,8 @@ function renderPage(res, bodyContent, options = {}) {
             #upload-status.success { color: var(--success-color); }
             #upload-status.error { color: var(--danger-color); }
             #upload-status.uploading { color: var(--warning-color); }
+            #progress-bar-container { width: 100%; background-color: rgba(0,0,0,0.3); border-radius: 8px; margin-top: 15px; overflow: hidden; height: 10px; display: none; }
+            #progress-bar { width: 0%; height: 100%; background-color: var(--primary-purple); border-radius: 8px; transition: width 0.3s ease; }
             .share-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
@@ -338,12 +326,14 @@ function renderPage(res, bodyContent, options = {}) {
                     });
                     const uploadForm = document.getElementById('upload-form');
                     if (uploadForm) {
-                        uploadForm.addEventListener('submit', async (event) => {
+                        uploadForm.addEventListener('submit', (event) => {
                             event.preventDefault();
                             
                             const uploadBtn = document.getElementById('upload-btn');
                             const uploadStatus = document.getElementById('upload-status');
                             const fileInput = document.getElementById('file-input');
+                            const progressBar = document.getElementById('progress-bar');
+                            const progressBarContainer = document.getElementById('progress-bar-container');
 
                             if (fileInput.files.length === 0) {
                                 uploadStatus.textContent = 'Please select a file first!';
@@ -352,33 +342,50 @@ function renderPage(res, bodyContent, options = {}) {
                             }
 
                             uploadBtn.disabled = true;
-                            uploadStatus.textContent = 'Uploading...';
+                            progressBar.style.width = '0%';
+                            progressBarContainer.style.display = 'block';
+                            uploadStatus.textContent = 'Uploading... (0%)';
                             uploadStatus.className = 'uploading';
 
                             const formData = new FormData(uploadForm);
-                            
-                            try {
-                                const response = await fetch('/upload', {
-                                    method: 'POST',
-                                    body: formData,
-                                });
+                            const xhr = new XMLHttpRequest();
 
-                                if (response.ok) {
+                            xhr.upload.addEventListener('progress', (e) => {
+                                if (e.lengthComputable) {
+                                    const percentComplete = (e.loaded / e.total) * 100;
+                                    progressBar.style.width = percentComplete + '%';
+                                    uploadStatus.textContent = \`Uploading... (\${Math.round(percentComplete)}%)\`;
+                                }
+                            });
+
+                            xhr.addEventListener('load', () => {
+                                if (xhr.status >= 200 && xhr.status < 300) {
+                                    progressBar.style.width = '100%';
                                     uploadStatus.textContent = 'Uploaded!';
                                     uploadStatus.className = 'success';
                                     setTimeout(() => window.location.reload(), 1000);
                                 } else {
-                                    const errorData = await response.json();
-                                    uploadStatus.textContent = \`Error while uploading! \${errorData.message || ''}\`;
+                                    try {
+                                        const errorData = JSON.parse(xhr.responseText);
+                                        uploadStatus.textContent = \`Error while uploading! \${errorData.message || ''}\`;
+                                    } catch (e) {
+                                        uploadStatus.textContent = 'Error while uploading! Server returned an invalid response.';
+                                    }
                                     uploadStatus.className = 'error';
                                     uploadBtn.disabled = false;
+                                    progressBarContainer.style.display = 'none';
                                 }
-                            } catch (error) {
-                                console.error('Upload failed:', error);
-                                uploadStatus.textContent = 'Error while uploading! Check console for details.';
+                            });
+
+                            xhr.addEventListener('error', () => {
+                                uploadStatus.textContent = 'Upload failed due to a network error.';
                                 uploadStatus.className = 'error';
                                 uploadBtn.disabled = false;
-                            }
+                                progressBarContainer.style.display = 'none';
+                            });
+
+                            xhr.open('POST', '/upload', true);
+                            xhr.send(formData);
                         });
                     }
                 });
@@ -438,6 +445,9 @@ app.get('/my-files', isAuthenticated, (req, res) => {
                         <button type="submit" id="upload-btn" class="btn btn-primary">Upload File</button>
                     </div>
                     <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
+                    <div id="progress-bar-container">
+                        <div id="progress-bar"></div>
+                    </div>
                     <div class="text-center"><span id="upload-status"></span></div>
                 </form>
             </div>`;
