@@ -27,13 +27,11 @@ let siteSettings = {};
 
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT, last_fingerprint TEXT, ban_reason TEXT)`);
-    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, folder_id INTEGER, embed_type TEXT NOT NULL DEFAULT 'card', FOREIGN KEY (folder_id) REFERENCES folders(id))`);
-    db.run(`CREATE TABLE IF NOT EXISTS folders (id INTEGER PRIMARY KEY AUTOINCREMENT, owner TEXT NOT NULL, name TEXT NOT NULL, parent_id INTEGER, FOREIGN KEY (parent_id) REFERENCES folders(id))`);
+    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, embed_type TEXT NOT NULL DEFAULT 'card')`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_fingerprints (fingerprint TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 });
-
 
 function loadSiteSettings() {
     db.all('SELECT * FROM settings', [], (err, rows) => {
@@ -153,19 +151,18 @@ const upload = multer({
 // --- 3. Helper Functions & Middleware ---
 function formatBytes(bytes, decimals = 2) { if (!+bytes) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ["Bytes", "KB", "MB", "GB", "TB"]; const i = Math.floor(Math.log(bytes) / Math.log(k)); return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`; }
 
-function getFileTypeIcon(filename) {
+function getFileTypeEmoji(filename) {
     const extension = path.extname(filename).toLowerCase().substring(1);
-    const svgIcon = (path) => `<svg class="file-type-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
-    const iconMap = {
-        'jpg': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`), 'png': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`), 'gif': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`), 'webp': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`),
-        'mp4': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`), 'mov': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`), 'webm': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`),
-        'mp3': svgIcon(`<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>`), 'wav': svgIcon(`<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>`),
-        'pdf': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`), 'doc': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`), 'docx': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`),
-        'zip': svgIcon(`<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>`), 'rar': svgIcon(`<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>`),
-        'js': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`), 'css': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`), 'html': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`),
+    const emojiMap = {
+        'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'webp': '🖼️', 'bmp': '🖼️',
+        'mp4': '🎬', 'mov': '🎬', 'avi': '🎬', 'mkv': '🎬', 'webm': '🎬',
+        'mp3': '🎵', 'wav': '🎵', 'ogg': '🎵', 'flac': '🎵',
+        'pdf': '📄', 'doc': '📝', 'docx': '📝', 'txt': '🗒️',
+        'zip': '📦', 'rar': '📦', '7z': '📦', 'tar': '📦', 'gz': '📦',
+        'html': '💻', 'css': '💻', 'js': '💻', 'json': '💻', 'py': '💻',
+        'xls': '📊', 'xlsx': '📊', 'csv': '📊', 'ppt': '📽️', 'pptx': '📽️',
     };
-    const defaultIcon = svgIcon(`<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>`);
-    return iconMap[extension] || defaultIcon;
+    return emojiMap[extension] || '📁'; // Default to a folder emoji
 }
 
 const isAuthenticated = (req, res, next) => { if (!req.session.user) return res.redirect('/login'); next(); };
@@ -241,13 +238,12 @@ function renderPage(res, bodyContent, options = {}) {
             .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
             .modal-content { padding: 30px; width: 90%; max-width: 500px; }
             .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-            .item-list { list-style: none; padding: 0; } 
-            .list-item { display: flex; align-items: center; gap: 15px; padding: 20px; }
-            .item-details { flex-grow: 1; overflow: hidden; }
-            .item-name { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 10px; }
-            .file-type-icon { width: 1.4em; height: 1.4em; color: var(--primary-purple); flex-shrink: 0; }
-            .item-meta { font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .item-actions { display: flex; gap: 10px; flex-shrink: 0; }
+            .file-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; }
+            .file-item { display: flex; align-items: center; gap: 15px; padding: 20px; }
+            .file-details { flex-grow: 1; overflow: hidden; }
+            .file-name { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .file-meta { font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             .file-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
             .upload-actions { display: flex; align-items: center; gap: 15px; }
             #file-name-display { color: var(--text-secondary); flex-grow: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 12px; }
@@ -260,23 +256,18 @@ function renderPage(res, bodyContent, options = {}) {
             .share-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
             #copy-confirm { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: var(--success-color); color: white; padding: 10px 20px; border-radius: 8px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
             #copy-confirm.show { opacity: 1; }
-            .breadcrumbs { margin-bottom: 20px; font-size: 1.1rem; color: var(--text-secondary); }
-            .breadcrumbs a { color: var(--primary-purple); text-decoration: none; }
-            .breadcrumbs a:hover { text-decoration: underline; }
-            .breadcrumbs span { margin: 0 8px; }
-
+            
             @media (max-width: 768px) {
                 .glass-panel { padding: 20px; }
                 .page-title { font-size: 2rem; }
                 .section-header { font-size: 1.25rem; }
                 .navbar { flex-direction: column; gap: 15px; }
                 .nav-links { justify-content: center; }
-                .list-item, .share-card { flex-direction: column; align-items: stretch; gap: 20px; }
-                .item-actions { flex-wrap: wrap; justify-content: flex-end; }
+                .file-item, .share-card { flex-direction: column; align-items: stretch; gap: 20px; }
+                .file-actions { flex-wrap: wrap; justify-content: flex-end; }
                 .upload-actions { flex-direction: column; align-items: stretch; }
                 .announcement-actions { flex-direction: column; align-items: stretch; }
                 .announcement-actions .btn { width: 100%; }
-                .controls-header { flex-direction: column; align-items: stretch; }
             }
         </style>
         </head><body>
@@ -300,28 +291,9 @@ function renderPage(res, bodyContent, options = {}) {
                     </form>
                 </div>
             </div>
-             <div id="folder-modal" class="modal-overlay">
-                <div class="modal-content glass-panel">
-                    <h3>Create New Folder</h3>
-                    <form id="folder-form" method="post" action="/folders/create">
-                        <input type="text" id="folder-name-input" name="name" placeholder="Enter folder name" required>
-                        <input type="hidden" id="parent-folder-id" name="parentId">
-                        <div class="modal-actions">
-                            <button type="button" id="cancel-folder-btn" class="btn btn-secondary">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Create</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
             <script nonce="${res.locals.nonce}">
                 document.addEventListener('DOMContentLoaded', () => {
                     document.body.addEventListener('click', event => {
-                        const createFolderBtn = event.target.closest('#create-folder-btn');
-                        if (createFolderBtn) {
-                            event.preventDefault();
-                            document.getElementById('parent-folder-id').value = createFolderBtn.dataset.parentId || '';
-                            document.getElementById('folder-modal').style.display = 'flex';
-                        }
                         if (event.target.classList.contains('open-ban-modal')) {
                             event.preventDefault();
                             document.getElementById('ban-username-input').value = event.target.dataset.username;
@@ -332,11 +304,6 @@ function renderPage(res, bodyContent, options = {}) {
                     if(banModal) {
                         document.getElementById('cancel-ban-btn').addEventListener('click', () => banModal.style.display = 'none');
                         banModal.addEventListener('click', (e) => { if (e.target === banModal) banModal.style.display = 'none'; });
-                    }
-                    const folderModal = document.getElementById('folder-modal');
-                    if(folderModal) {
-                        document.getElementById('cancel-folder-btn').addEventListener('click', () => folderModal.style.display = 'none');
-                        folderModal.addEventListener('click', (e) => { if (e.target === folderModal) folderModal.style.display = 'none'; });
                     }
                     const fileInput = document.getElementById('file-input');
                     if (fileInput) {
@@ -364,18 +331,22 @@ function renderPage(res, bodyContent, options = {}) {
                             const fileInput = document.getElementById('file-input');
                             const progressBar = document.getElementById('progress-bar');
                             const progressBarContainer = document.getElementById('progress-bar-container');
+
                             if (fileInput.files.length === 0) {
                                 uploadStatus.textContent = 'Please select a file first!';
                                 uploadStatus.className = 'error';
                                 return;
                             }
+
                             uploadBtn.disabled = true;
                             progressBar.style.width = '0%';
                             progressBarContainer.style.display = 'block';
                             uploadStatus.textContent = 'Uploading... (0%)';
                             uploadStatus.className = 'uploading';
+
                             const formData = new FormData(uploadForm);
                             const xhr = new XMLHttpRequest();
+
                             xhr.upload.addEventListener('progress', (e) => {
                                 if (e.lengthComputable) {
                                     const percentComplete = (e.loaded / e.total) * 100;
@@ -383,6 +354,7 @@ function renderPage(res, bodyContent, options = {}) {
                                     uploadStatus.textContent = 'Uploading... (' + Math.round(percentComplete) + '%)';
                                 }
                             });
+
                             xhr.addEventListener('load', () => {
                                 if (xhr.status >= 200 && xhr.status < 300) {
                                     progressBar.style.width = '100%';
@@ -401,12 +373,14 @@ function renderPage(res, bodyContent, options = {}) {
                                     progressBarContainer.style.display = 'none';
                                 }
                             });
+
                             xhr.addEventListener('error', () => {
                                 uploadStatus.textContent = 'Upload failed due to a network error.';
                                 uploadStatus.className = 'error';
                                 uploadBtn.disabled = false;
                                 progressBarContainer.style.display = 'none';
                             });
+
                             xhr.open('POST', '/upload', true);
                             xhr.send(formData);
                         });
@@ -419,6 +393,7 @@ function renderPage(res, bodyContent, options = {}) {
 // --- 5. Main Routes ---
 app.get('/', (req, res) => {
     if (req.session.user) return res.redirect('/my-files');
+
     const metaTags = `
         <meta property="og:title" content="The Vault - Secure File Sharing">
         <meta property="og:description" content="A secure and stylish corner of the cloud. Log in or register to start uploading files.">
@@ -426,6 +401,7 @@ app.get('/', (req, res) => {
         <meta property="og:url" content="${DOMAIN}">
         <meta name="theme-color" content="#a855f7">
     `;
+
     const bodyContent = `
         <main>
             <div class="centered-container">
@@ -440,198 +416,48 @@ app.get('/', (req, res) => {
     renderPage(res, bodyContent, { title: 'Welcome to The Vault', hideNav: true, metaTags: metaTags });
 });
 
-// --- File & Folder Routes ---
-app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
-    const { folderId } = req.params;
-    const currentFolderId = folderId ? parseInt(folderId, 10) : null;
-    const { username } = req.session.user;
-
-    const breadcrumbs = [{ name: 'My Files', link: '/my-files' }];
-    if (currentFolderId) {
-        let parentId = currentFolderId;
-        const path = [];
-        let depth = 0; // Safety break for breadcrumbs
-        while (parentId && depth < 20) {
-            const parentFolder = await new Promise((resolve, reject) => {
-                db.get('SELECT * FROM folders WHERE id = ? AND owner = ?', [parentId, username], (err, row) => err ? reject(err) : resolve(row));
-            });
-            if (parentFolder) {
-                path.unshift({ name: parentFolder.name, link: `/my-files/folder/${parentFolder.id}` });
-                parentId = parentFolder.parent_id;
-            } else {
-                break;
-            }
-            depth++;
-        }
-        breadcrumbs.push(...path);
-    }
-    const breadcrumbsHtml = breadcrumbs.map(b => `<a href="${b.link}">${b.name}</a>`).join('<span>&gt;</span>');
-
-    const folders = await new Promise((resolve, reject) => {
-        const query = currentFolderId ? 'SELECT * FROM folders WHERE owner = ? AND parent_id = ? ORDER BY name ASC' : 'SELECT * FROM folders WHERE owner = ? AND parent_id IS NULL ORDER BY name ASC';
-        db.all(query, [username, currentFolderId], (err, rows) => err ? reject(err) : resolve(rows));
-    });
-    const files = await new Promise((resolve, reject) => {
-        const query = currentFolderId ? 'SELECT * FROM files WHERE owner = ? AND folder_id = ? ORDER BY originalName ASC' : 'SELECT * FROM files WHERE owner = ? AND folder_id IS NULL ORDER BY originalName ASC';
-        db.all(query, [username, currentFolderId], (err, rows) => err ? reject(err) : resolve(rows));
-    });
-
-    const items = [
-        ...folders.map(f => ({ ...f, type: 'folder', name: f.name, id: f.id })),
-        ...files.map(f => ({ ...f, type: 'file', name: f.originalName, id: f.id }))
-    ];
-
-    const itemListHtml = items.length > 0 ? `<ul class="item-list">${items.map(item => {
-        const icon = item.type === 'folder'
-            ? `<svg class="file-type-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`
-            : getFileTypeIcon(item.name);
-        const link = item.type === 'folder' ? `/my-files/folder/${item.id}` : `/share/${item.id}`;
-        const meta = item.type === 'file' ? `<div class="item-meta">Size: ${formatBytes(item.size)}</div>` : `<div class="item-meta">Folder</div>`;
-        const actions = item.type === 'file' ? `
-            <button type="button" class="btn btn-secondary copy-link-btn" data-link="${DOMAIN}/share/${item.id}">Copy Link</button>
-            <a href="/download/${item.id}" class="btn btn-primary">Download</a>
-            <form action="/my-files/delete" method="post"><input type="hidden" name="id" value="${item.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
-        ` : `
-            <form action="/folders/delete" method="post"><input type="hidden" name="id" value="${item.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
-        `;
-
-        return `<li class="list-item glass-panel">
-            <div class="item-details">
-                <a href="${link}" class="item-name" title="${item.name}">${icon} ${item.name}</a>
-                ${meta}
-            </div>
-            <div class="item-actions">${actions}</div>
-        </li>`;
-    }).join('')}</ul>` : '<div class="glass-panel text-center"><p>This folder is empty.</p></div>';
-
-    const uploadForm = `
-        <div class="glass-panel" style="margin-top: 40px;">
-            <form id="upload-form">
-                <h2 class="section-header">Upload New File</h2>
-                <div class="upload-actions">
-                    <label for="file-input" class="btn btn-secondary">Browse Files...</label>
-                    <span id="file-name-display">No file selected</span>
-                    <button type="submit" id="upload-btn" class="btn btn-primary">Upload File</button>
+app.get('/my-files', isAuthenticated, (req, res) => {
+    db.all('SELECT * FROM files WHERE owner = ? ORDER BY originalName ASC', [req.session.user.username], (err, userFiles) => {
+        if (err) { console.error(err); return res.status(500).send("Database error."); }
+        const fileListHtml = userFiles.length > 0 ? `<ul class="file-list">${userFiles.map(file => `
+            <li class="file-item glass-panel">
+                <div class="file-details">
+                    <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${getFileTypeEmoji(file.originalName)} ${file.originalName}</a>
+                    <div class="file-meta">Size: ${formatBytes(file.size)}</div>
                 </div>
-                <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
-                <input type="hidden" name="folderId" value="${currentFolderId || ''}">
-                <div id="progress-bar-container"><div id="progress-bar"></div></div>
-                <div class="text-center"><span id="upload-status"></span></div>
-            </form>
-        </div>`;
-
-    const controlsHeader = `
-        <div class="controls-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
-             <h1 class="page-title" style="margin-bottom: 0;">My Vault</h1>
-             <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;">
-                <form action="/my-files/search" method="get" style="flex-direction: row; gap: 10px;">
-                    <input type="text" name="q" placeholder="Search files and folders..." required>
-                    <button type="submit" class="btn btn-secondary">Search</button>
+                <div class="file-actions">
+                    <button type="button" class="btn btn-secondary copy-link-btn" data-link="${DOMAIN}/share/${file.id}">Copy Link</button>
+                    <a href="/download/${file.id}" class="btn btn-primary">Download</a>
+                    <form action="/my-files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form>
+                </div>
+            </li>`).join('')}</ul>`
+            : '<div class="glass-panel text-center"><p>Your vault is empty. Upload a file below!</p></div>';
+        const uploadForm = `
+            <div class="glass-panel" style="margin-top: 40px;">
+                <form id="upload-form">
+                    <h2 class="section-header">Upload New File</h2>
+                    <div class="upload-actions">
+                        <label for="file-input" class="btn btn-secondary">Browse Files...</label>
+                        <span id="file-name-display">No file selected</span>
+                        <button type="submit" id="upload-btn" class="btn btn-primary">Upload File</button>
+                    </div>
+                    <input type="file" name="sharedFile" id="file-input" class="file-input-hidden" required>
+                    <div id="progress-bar-container"><div id="progress-bar"></div></div>
+                    <div class="text-center"><span id="upload-status"></span></div>
                 </form>
-                <button id="create-folder-btn" class="btn btn-primary" data-parent-id="${currentFolderId || ''}">Create Folder</button>
-             </div>
-        </div>
-        <div class="breadcrumbs">${breadcrumbsHtml}</div>
-    `;
-
-    const body = `<main>${controlsHeader}${itemListHtml}${uploadForm}</main>`;
-    renderPage(res, body, { title: 'My Vault' });
-});
-
-app.get('/my-files/search', isAuthenticated, async(req, res) => {
-    const { q } = req.query;
-    if (!q) return res.redirect('/my-files');
-
-    const { username } = req.session.user;
-    const searchQuery = `%${q}%`;
-
-    const folders = await new Promise((resolve, reject) => {
-        db.all('SELECT * FROM folders WHERE owner = ? AND name LIKE ?', [username, searchQuery], (err, rows) => err ? reject(err) : resolve(rows));
-    });
-    const files = await new Promise((resolve, reject) => {
-        db.all('SELECT * FROM files WHERE owner = ? AND originalName LIKE ?', [username, searchQuery], (err, rows) => err ? reject(err) : resolve(rows));
-    });
-
-     const items = [
-        ...folders.map(f => ({ ...f, type: 'folder', name: f.name, id: f.id })),
-        ...files.map(f => ({ ...f, type: 'file', name: f.originalName, id: f.id }))
-    ];
-
-    const itemListHtml = items.length > 0 ? `<ul class="item-list">${items.map(item => {
-        const icon = item.type === 'folder'
-            ? `<svg class="file-type-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`
-            : getFileTypeIcon(item.name);
-        const link = item.type === 'folder' ? `/my-files/folder/${item.id}` : `/share/${item.id}`;
-        const meta = item.type === 'file' ? `<div class="item-meta">Size: ${formatBytes(item.size)}</div>` : `<div class="item-meta">Folder</div>`;
-        return `<li class="list-item glass-panel">
-            <div class="item-details">
-                <a href="${link}" class="item-name" title="${item.name}">${icon} ${item.name}</a>
-                ${meta}
-            </div>
-        </li>`;
-    }).join('')}</ul>` : `<div class="glass-panel text-center"><p>No results found for "${q}".</p></div>`;
-    
-    const body = `<main><h1 class="page-title">Search Results for "${q}"</h1><a href="/my-files" style="margin-bottom:20px; display:inline-block;">&larr; Back to My Files</a>${itemListHtml}</main>`;
-    renderPage(res, body, { title: `Search: ${q}` });
-});
-
-app.post('/folders/create', isAuthenticated, (req, res) => {
-    const { name, parentId } = req.body;
-    const { username } = req.session.user;
-    const parentFolderId = parentId ? parseInt(parentId, 10) : null;
-    
-    db.run('INSERT INTO folders (owner, name, parent_id) VALUES (?, ?, ?)', [username, name, parentFolderId], function(err) {
-        if (err) {
-            console.error(err);
-            req.session.flash = { type: 'error', message: 'Error creating folder.' };
-        } else {
-            req.session.flash = { type: 'success', message: `Folder "${name}" created.` };
-        }
-        const redirectUrl = parentFolderId ? `/my-files/folder/${parentFolderId}` : '/my-files';
-        res.redirect(redirectUrl);
+            </div>`;
+        const body = `<main><h1 class="page-title">My Vault</h1>${fileListHtml}${uploadForm}</main>`;
+        renderPage(res, body, { title: 'My Vault' });
     });
 });
-
-app.post('/folders/delete', isAuthenticated, (req, res) => {
-    const { id } = req.body;
-    const { username } = req.session.user;
-
-    db.get('SELECT * FROM folders WHERE id = ? AND owner = ?', [id, username], (err, folder) => {
-        if (err || !folder) return res.status(404).send("Folder not found or permission denied.");
-
-        db.get('SELECT COUNT(*) as count FROM files WHERE folder_id = ?', [id], (err, fileCount) => {
-            if (fileCount.count > 0) {
-                req.session.flash = { type: 'error', message: 'Cannot delete a folder that is not empty.' };
-                return res.redirect('back');
-            }
-            db.get('SELECT COUNT(*) as count FROM folders WHERE parent_id = ?', [id], (err, folderCount) => {
-                if (folderCount.count > 0) {
-                    req.session.flash = { type: 'error', message: 'Cannot delete a folder that is not empty.' };
-                    return res.redirect('back');
-                }
-                db.run('DELETE FROM folders WHERE id = ?', [id], () => {
-                    req.session.flash = { type: 'success', message: 'Folder deleted.' };
-                    res.redirect('back');
-                });
-            });
-        });
-    });
-});
-
-
-app.get('/my-files', (req, res) => res.redirect('/my-files/folder'));
 
 app.post('/upload', isAuthenticated, upload.single('sharedFile'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ message: "No file was uploaded." });
     }
-    const { folderId } = req.body;
     const id = crypto.randomBytes(4).toString('hex');
     const { originalname, filename, size } = req.file;
-    const finalFolderId = folderId ? parseInt(folderId, 10) : null;
-
-    db.run('INSERT INTO files (id, owner, originalName, storedName, size, folder_id) VALUES (?, ?, ?, ?, ?, ?)', 
-        [id, req.session.user.username, originalname, filename, size, finalFolderId], (err) => {
+    db.run('INSERT INTO files (id, owner, originalName, storedName, size) VALUES (?, ?, ?, ?, ?)', [id, req.session.user.username, originalname, filename, size], (err) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ message: "Error saving file info to the database." });
@@ -646,7 +472,7 @@ app.post('/my-files/delete', isAuthenticated, (req, res) => {
         if (err || !row) return res.status(404).send('File not found or permission denied.');
         fs.unlink(path.join(UPLOAD_DIR, row.storedName), (unlinkErr) => {
             if (unlinkErr) console.error("File deletion error:", unlinkErr);
-            db.run('DELETE FROM files WHERE id = ?', [id], () => res.redirect('back'));
+            db.run('DELETE FROM files WHERE id = ?', [id], () => res.redirect('/my-files'));
         });
     });
 });
@@ -765,7 +591,7 @@ app.post('/login', (req, res) => {
             const fingerprint = generateFingerprint(req);
             db.run('UPDATE users SET last_login_ip = ?, last_fingerprint = ? WHERE username = ?', [userIp, fingerprint, username]);
             req.session.user = { username: user.username, role: user.role };
-            res.redirect('/my-files/folder');
+            res.redirect('/my-files');
         } else {
             req.session.flash = { type: 'error', message: 'Invalid username or password.' };
             res.redirect('/login');
@@ -873,18 +699,18 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
                 } else {
                     actionsHtml = '<span style="color:var(--text-secondary)">(This is you)</span>';
                 }
-                return `<li class="list-item glass-panel">
-                            <div class="item-details">
-                                <span class="item-name">${user.username} <span style="font-weight:400; font-size:0.9rem; color:var(--${isBanned ? 'danger' : 'success'}-color);">- ${isBanned ? 'Banned' : 'Active'}</span></span>
-                                <div class="item-meta">Role: ${user.role} &bull; IP: ${user.last_login_ip || 'N/A'}</div>
-                            </div><div class="item-actions">${actionsHtml}</div></li>`;
+                return `<li class="file-item glass-panel">
+                            <div class="file-details">
+                                <span class="file-name">${user.username} <span style="font-weight:400; font-size:0.9rem; color:var(--${isBanned ? 'danger' : 'success'}-color);">- ${isBanned ? 'Banned' : 'Active'}</span></span>
+                                <div class="file-meta">Role: ${user.role} &bull; IP: ${user.last_login_ip || 'N/A'}</div>
+                            </div><div class="file-actions">${actionsHtml}</div></li>`;
             }).join('');
             const fileListHtml = allFiles.map(file => `
-                <li class="list-item glass-panel">
-                    <div class="item-details">
-                        <a href="/share/${file.id}" class="item-name" title="${file.originalName}">${getFileTypeIcon(file.originalName)} ${file.originalName}</a>
-                        <div class="item-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div>
-                    </div><div class="item-actions"><form action="/admin/files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
+                <li class="file-item glass-panel">
+                    <div class="file-details">
+                        <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${getFileTypeEmoji(file.originalName)} ${file.originalName}</a>
+                        <div class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div>
+                    </div><div class="file-actions"><form action="/admin/files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
             ).join('');
             
             const isLockdownEnabled = siteSettings.lockdown === 'true';
@@ -923,8 +749,8 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
             const bodyContent = `<main>
                 <h1 class="page-title">Admin Panel</h1>
                 ${controlsSection}
-                <div class="glass-panel" style="margin-bottom: 30px;"><h2 class="section-header">Manage Users</h2><ul class="item-list">${userListHtml || '<p>No users found.</p>'}</ul></div>
-                <div class="glass-panel"><h2 class="section-header">Manage All Files</h2><ul class="item-list">${fileListHtml || '<p>No files found.</p>'}</ul></div></main>`;
+                <div class="glass-panel" style="margin-bottom: 30px;"><h2 class="section-header">Manage Users</h2><ul class="file-list">${userListHtml || '<p>No users found.</p>'}</ul></div>
+                <div class="glass-panel"><h2 class="section-header">Manage All Files</h2><ul class="file-list">${fileListHtml || '<p>No files found.</p>'}</ul></div></main>`;
             renderPage(res, bodyContent, { title: 'Admin Panel' });
         });
     });
