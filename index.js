@@ -26,12 +26,9 @@ const db = new sqlite3.Database('./file-share.db', sqlite3.OPEN_READWRITE | sqli
 let siteSettings = {};
 
 db.serialize(() => {
-    // Modified Files Table
-    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, folder_id INTEGER, embed_type TEXT NOT NULL DEFAULT 'card', FOREIGN KEY (folder_id) REFERENCES folders(id))`);
-    // New Folders Table
-    db.run(`CREATE TABLE IF NOT EXISTS folders (id INTEGER PRIMARY KEY AUTOINCREMENT, owner TEXT NOT NULL, name TEXT NOT NULL, parent_id INTEGER, FOREIGN KEY (parent_id) REFERENCES folders(id))`);
-    
     db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', last_login_ip TEXT, last_fingerprint TEXT, ban_reason TEXT)`);
+    db.run(`CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL, originalName TEXT NOT NULL, storedName TEXT NOT NULL, size INTEGER, folder_id INTEGER, embed_type TEXT NOT NULL DEFAULT 'card', FOREIGN KEY (folder_id) REFERENCES folders(id))`);
+    db.run(`CREATE TABLE IF NOT EXISTS folders (id INTEGER PRIMARY KEY AUTOINCREMENT, owner TEXT NOT NULL, name TEXT NOT NULL, parent_id INTEGER, FOREIGN KEY (parent_id) REFERENCES folders(id))`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_ips (ip TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     db.run(`CREATE TABLE IF NOT EXISTS banned_fingerprints (fingerprint TEXT PRIMARY KEY NOT NULL, banned_user TEXT, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
@@ -174,6 +171,7 @@ function getFileTypeIcon(filename) {
 const isAuthenticated = (req, res, next) => { if (!req.session.user) return res.redirect('/login'); next(); };
 const isAdmin = (req, res, next) => { if (req.session.user && req.session.user.role === 'admin') return next(); res.status(403).send('<h1>403 Forbidden</h1>'); };
 
+
 // --- 4. Page Rendering ---
 function renderPage(res, bodyContent, options = {}) {
     const navBar = options.hideNav ? '' : `
@@ -243,7 +241,6 @@ function renderPage(res, bodyContent, options = {}) {
             .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; }
             .modal-content { padding: 30px; width: 90%; max-width: 500px; }
             .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-            .file-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; }
             .item-list { list-style: none; padding: 0; } 
             .list-item { display: flex; align-items: center; gap: 15px; padding: 20px; }
             .item-details { flex-grow: 1; overflow: hidden; }
@@ -381,7 +378,7 @@ function renderPage(res, bodyContent, options = {}) {
                                 if (e.lengthComputable) {
                                     const percentComplete = (e.loaded / e.total) * 100;
                                     progressBar.style.width = percentComplete + '%';
-                                    uploadStatus.textContent = \`Uploading... (\${Math.round(percentComplete)}%)\`;
+                                    uploadStatus.textContent = 'Uploading... (' + Math.round(percentComplete) + '%)';
                                 }
                             });
                             xhr.addEventListener('load', () => {
@@ -393,7 +390,7 @@ function renderPage(res, bodyContent, options = {}) {
                                 } else {
                                     try {
                                         const errorData = JSON.parse(xhr.responseText);
-                                        uploadStatus.textContent = \`Error while uploading! \${errorData.message || ''}\`;
+                                        uploadStatus.textContent = 'Error while uploading! ' + (errorData.message || '');
                                     } catch (e) {
                                         uploadStatus.textContent = 'Error while uploading! Server returned an invalid response.';
                                     }
@@ -447,7 +444,6 @@ app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
     const currentFolderId = folderId ? parseInt(folderId, 10) : null;
     const { username } = req.session.user;
 
-    // Build breadcrumbs
     const breadcrumbs = [{ name: 'My Files', link: '/my-files' }];
     if (currentFolderId) {
         let parentId = currentFolderId;
@@ -467,7 +463,6 @@ app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
     }
     const breadcrumbsHtml = breadcrumbs.map(b => `<a href="${b.link}">${b.name}</a>`).join('<span>&gt;</span>');
 
-    // Get folders and files
     const folders = await new Promise((resolve, reject) => {
         const query = currentFolderId ? 'SELECT * FROM folders WHERE owner = ? AND parent_id = ? ORDER BY name ASC' : 'SELECT * FROM folders WHERE owner = ? AND parent_id IS NULL ORDER BY name ASC';
         db.all(query, [username, currentFolderId], (err, rows) => err ? reject(err) : resolve(rows));
@@ -524,7 +519,7 @@ app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
     const controlsHeader = `
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
              <h1 class="page-title" style="margin-bottom: 0;">My Vault</h1>
-             <div style="display: flex; gap: 10px;">
+             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <form action="/my-files/search" method="get" style="flex-direction: row; gap: 10px;">
                     <input type="text" name="q" placeholder="Search files and folders..." required>
                     <button type="submit" class="btn btn-secondary">Search</button>
