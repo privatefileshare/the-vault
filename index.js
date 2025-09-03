@@ -276,6 +276,7 @@ function renderPage(res, bodyContent, options = {}) {
                 .upload-actions { flex-direction: column; align-items: stretch; }
                 .announcement-actions { flex-direction: column; align-items: stretch; }
                 .announcement-actions .btn { width: 100%; }
+                .controls-header { flex-direction: column; align-items: stretch; }
             }
         </style>
         </head><body>
@@ -315,9 +316,10 @@ function renderPage(res, bodyContent, options = {}) {
             <script nonce="${res.locals.nonce}">
                 document.addEventListener('DOMContentLoaded', () => {
                     document.body.addEventListener('click', event => {
-                        if (event.target.id === 'create-folder-btn') {
+                        const createFolderBtn = event.target.closest('#create-folder-btn');
+                        if (createFolderBtn) {
                             event.preventDefault();
-                            document.getElementById('parent-folder-id').value = event.target.dataset.parentId || '';
+                            document.getElementById('parent-folder-id').value = createFolderBtn.dataset.parentId || '';
                             document.getElementById('folder-modal').style.display = 'flex';
                         }
                         if (event.target.classList.contains('open-ban-modal')) {
@@ -448,7 +450,8 @@ app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
     if (currentFolderId) {
         let parentId = currentFolderId;
         const path = [];
-        while (parentId) {
+        let depth = 0; // Safety break for breadcrumbs
+        while (parentId && depth < 20) {
             const parentFolder = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM folders WHERE id = ? AND owner = ?', [parentId, username], (err, row) => err ? reject(err) : resolve(row));
             });
@@ -458,6 +461,7 @@ app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
             } else {
                 break;
             }
+            depth++;
         }
         breadcrumbs.push(...path);
     }
@@ -517,9 +521,9 @@ app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
         </div>`;
 
     const controlsHeader = `
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
+        <div class="controls-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
              <h1 class="page-title" style="margin-bottom: 0;">My Vault</h1>
-             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+             <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;">
                 <form action="/my-files/search" method="get" style="flex-direction: row; gap: 10px;">
                     <input type="text" name="q" placeholder="Search files and folders..." required>
                     <button type="submit" class="btn btn-secondary">Search</button>
@@ -761,7 +765,7 @@ app.post('/login', (req, res) => {
             const fingerprint = generateFingerprint(req);
             db.run('UPDATE users SET last_login_ip = ?, last_fingerprint = ? WHERE username = ?', [userIp, fingerprint, username]);
             req.session.user = { username: user.username, role: user.role };
-            res.redirect('/my-files');
+            res.redirect('/my-files/folder');
         } else {
             req.session.flash = { type: 'error', message: 'Invalid username or password.' };
             res.redirect('/login');
