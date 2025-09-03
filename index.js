@@ -151,18 +151,19 @@ const upload = multer({
 // --- 3. Helper Functions & Middleware ---
 function formatBytes(bytes, decimals = 2) { if (!+bytes) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ["Bytes", "KB", "MB", "GB", "TB"]; const i = Math.floor(Math.log(bytes) / Math.log(k)); return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`; }
 
-function getFileTypeEmoji(filename) {
+function getFileTypeIcon(filename) {
     const extension = path.extname(filename).toLowerCase().substring(1);
-    const emojiMap = {
-        'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'webp': '🖼️', 'bmp': '🖼️',
-        'mp4': '🎬', 'mov': '🎬', 'avi': '🎬', 'mkv': '🎬', 'webm': '🎬',
-        'mp3': '🎵', 'wav': '🎵', 'ogg': '🎵', 'flac': '🎵',
-        'pdf': '📄', 'doc': '📝', 'docx': '📝', 'txt': '🗒️',
-        'zip': '📦', 'rar': '📦', '7z': '📦', 'tar': '📦', 'gz': '📦',
-        'html': '💻', 'css': '💻', 'js': '💻', 'json': '💻', 'py': '💻',
-        'xls': '📊', 'xlsx': '📊', 'csv': '📊', 'ppt': '📽️', 'pptx': '📽️',
+    const svgIcon = (path) => `<svg class="file-type-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+    const iconMap = {
+        'jpg': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`), 'png': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`), 'gif': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`), 'webp': svgIcon(`<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>`),
+        'mp4': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`), 'mov': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`), 'webm': svgIcon(`<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>`),
+        'mp3': svgIcon(`<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>`), 'wav': svgIcon(`<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>`),
+        'pdf': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`), 'doc': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`), 'docx': svgIcon(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>`),
+        'zip': svgIcon(`<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>`), 'rar': svgIcon(`<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>`),
+        'js': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`), 'css': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`), 'html': svgIcon(`<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>`),
     };
-    return emojiMap[extension] || '📁'; // Default to a folder emoji
+    const defaultIcon = svgIcon(`<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>`);
+    return iconMap[extension] || defaultIcon;
 }
 
 const isAuthenticated = (req, res, next) => { if (!req.session.user) return res.redirect('/login'); next(); };
@@ -241,7 +242,8 @@ function renderPage(res, bodyContent, options = {}) {
             .file-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; }
             .file-item { display: flex; align-items: center; gap: 15px; padding: 20px; }
             .file-details { flex-grow: 1; overflow: hidden; }
-            .file-name { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .file-name { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 10px; }
+            .file-type-icon { width: 1.4em; height: 1.4em; color: var(--primary-purple); flex-shrink: 0; }
             .file-meta { font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .file-actions { display: flex; gap: 10px; flex-shrink: 0; }
             .file-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
@@ -331,22 +333,18 @@ function renderPage(res, bodyContent, options = {}) {
                             const fileInput = document.getElementById('file-input');
                             const progressBar = document.getElementById('progress-bar');
                             const progressBarContainer = document.getElementById('progress-bar-container');
-
                             if (fileInput.files.length === 0) {
                                 uploadStatus.textContent = 'Please select a file first!';
                                 uploadStatus.className = 'error';
                                 return;
                             }
-
                             uploadBtn.disabled = true;
                             progressBar.style.width = '0%';
                             progressBarContainer.style.display = 'block';
                             uploadStatus.textContent = 'Uploading... (0%)';
                             uploadStatus.className = 'uploading';
-
                             const formData = new FormData(uploadForm);
                             const xhr = new XMLHttpRequest();
-
                             xhr.upload.addEventListener('progress', (e) => {
                                 if (e.lengthComputable) {
                                     const percentComplete = (e.loaded / e.total) * 100;
@@ -354,7 +352,6 @@ function renderPage(res, bodyContent, options = {}) {
                                     uploadStatus.textContent = 'Uploading... (' + Math.round(percentComplete) + '%)';
                                 }
                             });
-
                             xhr.addEventListener('load', () => {
                                 if (xhr.status >= 200 && xhr.status < 300) {
                                     progressBar.style.width = '100%';
@@ -373,14 +370,12 @@ function renderPage(res, bodyContent, options = {}) {
                                     progressBarContainer.style.display = 'none';
                                 }
                             });
-
                             xhr.addEventListener('error', () => {
                                 uploadStatus.textContent = 'Upload failed due to a network error.';
                                 uploadStatus.className = 'error';
                                 uploadBtn.disabled = false;
                                 progressBarContainer.style.display = 'none';
                             });
-
                             xhr.open('POST', '/upload', true);
                             xhr.send(formData);
                         });
@@ -422,7 +417,7 @@ app.get('/my-files', isAuthenticated, (req, res) => {
         const fileListHtml = userFiles.length > 0 ? `<ul class="file-list">${userFiles.map(file => `
             <li class="file-item glass-panel">
                 <div class="file-details">
-                    <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${getFileTypeEmoji(file.originalName)} ${file.originalName}</a>
+                    <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${getFileTypeIcon(file.originalName)} ${file.originalName}</a>
                     <div class="file-meta">Size: ${formatBytes(file.size)}</div>
                 </div>
                 <div class="file-actions">
@@ -708,7 +703,7 @@ app.get('/admin', isAuthenticated, isAdmin, (req, res) => {
             const fileListHtml = allFiles.map(file => `
                 <li class="file-item glass-panel">
                     <div class="file-details">
-                        <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${getFileTypeEmoji(file.originalName)} ${file.originalName}</a>
+                        <a href="/share/${file.id}" class="file-name" title="${file.originalName}">${getFileTypeIcon(file.originalName)} ${file.originalName}</a>
                         <div class="file-meta">Owner: ${file.owner} &bull; Size: ${formatBytes(file.size)}</div>
                     </div><div class="file-actions"><form action="/admin/files/delete" method="post"><input type="hidden" name="id" value="${file.id}"><button type="submit" class="btn btn-danger">Delete</button></form></div></li>`
             ).join('');
