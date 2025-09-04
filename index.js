@@ -456,7 +456,6 @@ app.get('/', (req, res) => {
     renderPage(res, bodyContent, { title: 'Welcome to The Vault', hideNav: true, metaTags: metaTags });
 });
 
-// --- File & Folder Routes ---
 app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
     const { folderId } = req.params;
     const currentFolderId = folderId ? parseInt(folderId, 10) : null;
@@ -466,7 +465,7 @@ app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
     if (currentFolderId) {
         let parentId = currentFolderId;
         const path = [];
-        let depth = 0; // Safety break for breadcrumbs
+        let depth = 0;
         while (parentId && depth < 20) {
             const parentFolder = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM folders WHERE id = ? AND owner = ?', [parentId, username], (err, row) => err ? reject(err) : resolve(row));
