@@ -77,6 +77,8 @@ app.use(helmet({
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
             "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`],
+            "style-src": ["'self'", "https://fonts.googleapis.com"],
+            "font-src": ["'self'", "https://fonts.gstatic.com"],
         },
     },
 }));
@@ -465,7 +467,7 @@ app.get('/my-files/folder?/:folderId?', isAuthenticated, async (req, res) => {
     if (currentFolderId) {
         let parentId = currentFolderId;
         const path = [];
-        let depth = 0; // Safety break for breadcrumbs
+        let depth = 0;
         while (parentId && depth < 20) {
             const parentFolder = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM folders WHERE id = ? AND owner = ?', [parentId, username], (err, row) => err ? reject(err) : resolve(row));
